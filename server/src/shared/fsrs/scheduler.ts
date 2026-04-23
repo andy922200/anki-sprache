@@ -42,7 +42,6 @@ export interface ScheduleResult {
     due: Date
     stability: number
     difficulty: number
-    elapsedDays: number
     scheduledDays: number
     learningSteps: number
     reps: number
@@ -60,13 +59,14 @@ export interface ScheduleResult {
   }
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
 export function scheduleReview(
   current: Pick<
     UserCardState,
     | 'due'
     | 'stability'
     | 'difficulty'
-    | 'elapsedDays'
     | 'scheduledDays'
     | 'learningSteps'
     | 'reps'
@@ -82,7 +82,11 @@ export function scheduleReview(
         due: current.due,
         stability: current.stability,
         difficulty: current.difficulty,
-        elapsed_days: current.elapsedDays,
+        // ts-fsrs v5 still requires elapsed_days; deprecated and removed in v6.
+        // Derive it from last_review so we don't depend on a persisted column.
+        elapsed_days: current.lastReview
+          ? Math.max(0, Math.floor((now.getTime() - current.lastReview.getTime()) / DAY_MS))
+          : 0,
         scheduled_days: current.scheduledDays,
         learning_steps: current.learningSteps,
         reps: current.reps,
@@ -99,7 +103,6 @@ export function scheduleReview(
       due: entry.card.due,
       stability: entry.card.stability,
       difficulty: entry.card.difficulty,
-      elapsedDays: entry.card.elapsed_days,
       scheduledDays: entry.card.scheduled_days,
       learningSteps: entry.card.learning_steps,
       reps: entry.card.reps,
