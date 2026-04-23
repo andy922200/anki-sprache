@@ -7,7 +7,7 @@ export type GoogleLoginInput = z.infer<typeof googleLoginSchema>
 
 export const userDto = z.object({
   id: z.string(),
-  email: z.string().email(),
+  email: z.email(),
   displayName: z.string(),
   avatarUrl: z.string().nullable(),
   timezone: z.string(),

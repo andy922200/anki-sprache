@@ -1,14 +1,25 @@
 import fp from 'fastify-plugin'
-import { ZodError } from 'zod'
+import {
+  hasZodFastifySchemaValidationErrors,
+  isResponseSerializationError,
+} from 'fastify-type-provider-zod'
 import { isDev } from '@/config/env.js'
 
 export default fp(async (app) => {
   app.setErrorHandler((error, req, reply) => {
-    if (error instanceof ZodError) {
+    if (hasZodFastifySchemaValidationErrors(error)) {
       return reply.status(400).send({
         error: 'ValidationError',
         message: 'Invalid request payload',
-        issues: error.issues,
+        issues: error.validation,
+      })
+    }
+
+    if (isResponseSerializationError(error)) {
+      req.log.error({ err: error }, 'Response serialization failed')
+      return reply.status(500).send({
+        error: 'ResponseSerializationError',
+        message: isDev ? error.message : 'Response serialization failed',
       })
     }
 

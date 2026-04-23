@@ -6,8 +6,8 @@ const envSchema = z.object({
   HOST: z.string().default('0.0.0.0'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 
-  DATABASE_URL: z.string().url(),
-  REDIS_URL: z.string().url(),
+  DATABASE_URL: z.url(),
+  REDIS_URL: z.url(),
 
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   COOKIE_DOMAIN: z.string().default('localhost'),
