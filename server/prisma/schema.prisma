@@ -1,0 +1,348 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───── Identity ─────
+
+model User {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  displayName String
+  avatarUrl   String?
+  timezone    String    @default("UTC")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  oauthAccounts  OAuthAccount[]
+  refreshTokens  RefreshToken[]
+  settings       UserSettings?
+  llmApiKeys     LlmApiKey[]
+  cardStates     UserCardState[]
+  reviews        ReviewLog[]
+  dailyGenLogs   DailyGenerationLog[]
+  llmUsageLogs   LlmUsageLog[]
+
+  @@index([email])
+}
+
+model OAuthAccount {
+  id                String        @id @default(cuid())
+  userId            String
+  provider          OAuthProvider
+  providerAccountId String
+  createdAt         DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model RefreshToken {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  userAgent  String?
+  ip         String?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ───── Settings & Keys ─────
+
+model UserSettings {
+  userId               String        @id
+  targetLanguageCode   String
+  nativeLanguageCode   String        @default("en")
+  cefrLevel            CEFR          @default(A1)
+  dailyNewCount        Int           @default(5)
+  preferredLlmProvider LlmProvider?
+  preferredLlmModel    String?
+  theme                Theme         @default(SYSTEM)
+  uiLanguage           UiLanguage    @default(EN)
+  updatedAt            DateTime      @updatedAt
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetLanguage Language @relation("TargetLanguage", fields: [targetLanguageCode], references: [code])
+  nativeLanguage Language @relation("NativeLanguage", fields: [nativeLanguageCode], references: [code])
+}
+
+model LlmApiKey {
+  id              String      @id @default(cuid())
+  userId          String
+  provider        LlmProvider
+  encryptedKey    Bytes
+  iv              Bytes
+  authTag         Bytes
+  keyFingerprint  String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+}
+
+// ───── Content ─────
+
+model Language {
+  code       String  @id
+  name       String
+  nativeName String
+  enabled    Boolean @default(true)
+
+  cards              VocabularyCard[]
+  targetSettings     UserSettings[]   @relation("TargetLanguage")
+  nativeSettings     UserSettings[]   @relation("NativeLanguage")
+  cardTranslations   CardTranslation[]
+  exampleTranslations ExampleSentenceTranslation[]
+}
+
+model VocabularyCard {
+  id             String        @id @default(cuid())
+  languageCode   String
+  lemma          String
+  surfaceForm    String?
+  partOfSpeech   PartOfSpeech?
+  gender         Gender?
+  ipa            String?
+  cefrLevel      CEFR
+  sourceProvider LlmProvider?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  language     Language           @relation(fields: [languageCode], references: [code])
+  examples     ExampleSentence[]
+  translations CardTranslation[]
+  states       UserCardState[]
+  reviews      ReviewLog[]
+
+  @@unique([languageCode, lemma, partOfSpeech])
+  @@index([languageCode, cefrLevel])
+}
+
+// Per-native-language translation of a VocabularyCard. A single card can be
+// translated into many native languages so learners with different mother
+// tongues all see the word in their own language.
+model CardTranslation {
+  id                 String   @id @default(cuid())
+  cardId             String
+  nativeLanguageCode String
+  translation        String
+  createdAt          DateTime @default(now())
+
+  card     VocabularyCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  language Language       @relation(fields: [nativeLanguageCode], references: [code])
+
+  @@unique([cardId, nativeLanguageCode])
+  @@index([cardId])
+}
+
+model ExampleSentence {
+  id          String  @id @default(cuid())
+  cardId      String
+  // Difficulty of THIS example. A single card can carry multiple examples
+  // across CEFR levels so A1 and C1 learners see appropriate sentences.
+  cefrLevel   CEFR    @default(A1)
+  text        String
+  audioUrl    String?
+  orderIndex  Int     @default(0)
+
+  card         VocabularyCard               @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  translations ExampleSentenceTranslation[]
+
+  @@index([cardId])
+  @@index([cardId, cefrLevel])
+}
+
+// Per-native-language translation of an example sentence.
+model ExampleSentenceTranslation {
+  id                 String   @id @default(cuid())
+  exampleId          String
+  nativeLanguageCode String
+  translation        String
+  createdAt          DateTime @default(now())
+
+  example  ExampleSentence @relation(fields: [exampleId], references: [id], onDelete: Cascade)
+  language Language        @relation(fields: [nativeLanguageCode], references: [code])
+
+  @@unique([exampleId, nativeLanguageCode])
+  @@index([exampleId])
+}
+
+// ───── FSRS state + logbook ─────
+
+model UserCardState {
+  id             String     @id @default(cuid())
+  userId         String
+  cardId         String
+  due            DateTime
+  stability      Float      @default(0)
+  difficulty     Float      @default(0)
+  elapsedDays    Int        @default(0)
+  scheduledDays  Int        @default(0)
+  reps           Int        @default(0)
+  lapses         Int        @default(0)
+  state          FsrsState  @default(NEW)
+  lastReview     DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card    VocabularyCard  @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  reviews ReviewLog[]
+
+  @@unique([userId, cardId])
+  @@index([userId, due])
+  @@index([userId, state])
+}
+
+model ReviewLog {
+  id                String      @id @default(cuid())
+  userId            String
+  cardId            String
+  userCardStateId   String
+  rating            FsrsRating
+  mode              ReviewMode
+  durationMs        Int
+  stabilityBefore   Float
+  stabilityAfter    Float
+  difficultyBefore  Float
+  difficultyAfter   Float
+  stateBefore       FsrsState
+  stateAfter        FsrsState
+  reviewedAt        DateTime    @default(now())
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card          VocabularyCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  userCardState UserCardState @relation(fields: [userCardStateId], references: [id], onDelete: Cascade)
+
+  @@index([userId, reviewedAt])
+  @@index([userId, cardId])
+}
+
+// ───── Generation + usage ledgers ─────
+
+model DailyGenerationLog {
+  id              String      @id @default(cuid())
+  userId          String
+  generationDate  DateTime    @db.Date
+  languageCode    String
+  cefrLevel       CEFR
+  cardIds         String[]
+  provider        LlmProvider?
+  createdAt       DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, generationDate, languageCode])
+  @@index([userId, generationDate])
+}
+
+model LlmUsageLog {
+  id                String       @id @default(cuid())
+  userId            String
+  provider          LlmProvider
+  model             String
+  purpose           LlmPurpose
+  promptTokens      Int          @default(0)
+  completionTokens  Int          @default(0)
+  latencyMs         Int          @default(0)
+  success           Boolean
+  errorCode         String?
+  createdAt         DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// ───── Enums ─────
+
+enum CEFR {
+  A1
+  A2
+  B1
+  B2
+  C1
+  C2
+}
+
+enum OAuthProvider {
+  GOOGLE
+  APPLE
+  GITHUB
+}
+
+enum LlmProvider {
+  OPENAI
+  ANTHROPIC
+  GOOGLE
+}
+
+enum Theme {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
+enum UiLanguage {
+  EN
+  ZH_TW
+}
+
+enum PartOfSpeech {
+  NOUN
+  VERB
+  ADJECTIVE
+  ADVERB
+  PRONOUN
+  PREPOSITION
+  CONJUNCTION
+  ARTICLE
+  INTERJECTION
+  NUMERAL
+}
+
+enum Gender {
+  DER
+  DIE
+  DAS
+}
+
+enum FsrsState {
+  NEW
+  LEARNING
+  REVIEW
+  RELEARNING
+}
+
+enum FsrsRating {
+  AGAIN
+  HARD
+  GOOD
+  EASY
+}
+
+enum ReviewMode {
+  FLIP
+  MULTIPLE_CHOICE
+}
+
+enum LlmPurpose {
+  DAILY_GEN
+  EXAMPLE_REGEN
+  TRANSLATION
+}

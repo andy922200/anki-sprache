@@ -1,0 +1,159 @@
+{
+  "common": {
+    "save": "儲存",
+    "saving": "儲存中…",
+    "cancel": "取消",
+    "loading": "載入中",
+    "none": "無",
+    "optional": "選填"
+  },
+  "app": {
+    "title": "Anki-Sprache"
+  },
+  "header": {
+    "today": "今日",
+    "logbook": "記錄簿",
+    "settings": "設定",
+    "logout": "登出"
+  },
+  "login": {
+    "subtitle": "使用 FSRS 與你自己的 LLM API Key 進行間隔複習語言學習",
+    "signingIn": "登入中…",
+    "failed": "登入失敗",
+    "scriptNotLoaded": "Google 登入指令碼未載入"
+  },
+  "dashboard": {
+    "greeting": "哈囉 {name} 👋",
+    "target": "目標語言",
+    "level": "等級",
+    "dailyNew": "每日新字",
+    "todayWords": "今日 {count} 個單字",
+    "generatePrompt": "產生今日的新字卡。",
+    "generateBtn": "產生今日單字",
+    "todayDeck": "今日字卡",
+    "deckSummary": "已產生 {count} 個單字",
+    "deckSummaryWithProvider": "透過 {provider} 產生了 {count} 個單字。",
+    "regenerate": "重新產生",
+    "regenerateConfirm": "重新產生今日 {count} 個單字？\n\n尚未複習的卡片會被捨棄，已評分過的卡片仍保留在你的牌組中。",
+    "dueNow": "待複習",
+    "cardsReady": "{count} 張卡片待複習",
+    "startFlip": "開始翻牌複習",
+    "multipleChoice": "選擇題",
+    "preview": "預覽",
+    "deckAlreadySet": "今日字卡已設定",
+    "generated": "已產生 {count} 個新單字",
+    "generationFailed": "產生失敗：{error}",
+    "generationTooSlow": "產生花費時間超過預期 — 請檢查 worker 日誌",
+    "generationNetworkError": "產生失敗 — 網路錯誤",
+    "generationStatusError": "產生失敗 ({status})：{message}",
+    "pickProvider": "請先到設定中挑選偏好的 LLM 提供者",
+    "addKey": "請到「設定 → API 金鑰」加入你的 API Key",
+    "caughtUp": "🎉 今日已完成。想多練習嗎？",
+    "practiceAgain": "重新練習今日單字",
+    "generateMore": "追加 {count} 個新字",
+    "generateMoreQueued": "正在產生更多單字…"
+  },
+  "review": {
+    "remaining": "還剩 {count} 張",
+    "allDone": "🎉 今日已完成！",
+    "comeBack": "待會再回來繼續下一波。",
+    "backDashboard": "返回今日",
+    "saveFailed": "儲存複習紀錄失敗",
+    "practiceBadge": "練習模式（不會更新進度）"
+  },
+  "flipCard": {
+    "flipHint": "點擊或按空白鍵翻牌",
+    "meaning": "意思",
+    "examples": "例句"
+  },
+  "rating": {
+    "again": "再次",
+    "hard": "困難",
+    "good": "良好",
+    "easy": "簡單"
+  },
+  "logbook": {
+    "title": "記錄簿",
+    "filterRating": "評分",
+    "filterMode": "模式",
+    "all": "全部",
+    "empty": "尚無複習紀錄。",
+    "loadMore": "載入更多",
+    "modeFlip": "翻牌",
+    "modeChoice": "選擇"
+  },
+  "settings": {
+    "title": "設定",
+    "profile": "個人資料",
+    "displayName": "顯示名稱",
+    "timezone": "時區",
+    "timezoneHint": "例如 Asia/Taipei",
+    "learning": "學習設定",
+    "targetLanguage": "目標語言",
+    "nativeLanguage": "母語",
+    "cefrLevel": "CEFR 等級",
+    "dailyNewCount": "每日新字數",
+    "preferences": "偏好",
+    "theme": "主題",
+    "uiLanguage": "介面語言",
+    "llm": "LLM",
+    "preferredProvider": "偏好提供者",
+    "model": "模型 ({optional})",
+    "modelHint": "留空即使用推薦預設值 ({default})。",
+    "manageKeys": "管理你的 API 金鑰請至",
+    "apiKeysLink": "API 金鑰",
+    "modelDocsHint": "模型名稱常有更動 — 請查閱各提供者官方文件取得最新 ID。",
+    "saved": "設定已儲存",
+    "saveFailed": "儲存設定失敗"
+  },
+  "apiKeys": {
+    "title": "API 金鑰",
+    "intro": "你的金鑰以 AES-256-GCM 加密儲存，僅用於產生你的每日單字，絕不暴露給瀏覽器。",
+    "saved": "已儲存 · 指紋",
+    "notConfigured": "尚未設定",
+    "placeholder": "貼上你的 API 金鑰",
+    "save": "儲存",
+    "replace": "替換",
+    "remove": "刪除",
+    "providerSaved": "{provider} 金鑰已儲存",
+    "providerRemoved": "{provider} 金鑰已刪除",
+    "saveFailed": "儲存金鑰失敗"
+  },
+  "llmSetup": {
+    "title": "需要設定 LLM",
+    "missingProviderIntro": "每日單字由 LLM 使用「你自己的 API Key」產生 — 這樣服務可保持免費並讓你掌控成本。你還沒選擇提供者。",
+    "grabKey": "先從支援的提供者取得一組 API 金鑰：",
+    "pasteYourKey": "貼上你的金鑰",
+    "pasteYourKeyHint": "（會加密儲存，瀏覽器不會看見）。",
+    "pickProvider": "到設定裡選擇你偏好的提供者",
+    "pickProviderHint": "完成後回到這裡。",
+    "missingKeyIntro": "你偏好的提供者是 {provider}，但尚未上傳對應的金鑰。",
+    "getKey": "取得 {provider} 金鑰",
+    "thenPaste": "然後貼到這裡"
+  },
+  "generation": {
+    "generating": "正在產生今日單字…",
+    "regenerating": "重新產生中…",
+    "subtext": "正在向 LLM 詢問新字彙 — 已過 {seconds} 秒。"
+  },
+  "theme": {
+    "light": "亮色",
+    "dark": "暗色",
+    "system": "跟隨系統"
+  },
+  "provider": {
+    "OPENAI": "OpenAI",
+    "ANTHROPIC": "Anthropic Claude",
+    "GOOGLE": "Google Gemini"
+  },
+  "notFound": {
+    "title": "404",
+    "message": "找不到頁面",
+    "goHome": "回首頁"
+  },
+  "errors": {
+    "tooManyRequests": "請求過於頻繁 — 請稍慢一點",
+    "serverError": "伺服器錯誤，請再試一次",
+    "networkError": "網路錯誤"
+  }
+}
