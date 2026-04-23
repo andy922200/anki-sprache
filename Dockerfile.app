@@ -6,7 +6,7 @@ FROM base AS deps
 WORKDIR /repo
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY app/package.json ./app/
-RUN pnpm install --filter app... --frozen-lockfile
+RUN pnpm install --filter ./app... --frozen-lockfile
 
 FROM base AS build
 WORKDIR /repo
