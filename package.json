@@ -1,11 +1,11 @@
 {
   "name": "anki-sprache",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "Anki-style multi-language learning web app with FSRS spaced repetition",
-  "packageManager": "pnpm@9.12.0",
+  "description": "仿 Anki 風格的多語言學習 Web App，採用 FSRS 間隔重複演算法 | Anki-style multi-language learning web app with FSRS spaced repetition",
+  "packageManager": "pnpm@10.33.2",
   "engines": {
-    "node": ">=20.10.0"
+    "node": ">=22.20.0"
   },
   "scripts": {
     "dev": "pnpm -r --parallel dev",
