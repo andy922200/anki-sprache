@@ -36,12 +36,12 @@
 
 | 層級 | 主要套件 |
 |---|---|
-| Monorepo | pnpm workspaces（`app/` + `server/`），pnpm 9.12.0 |
-| Frontend | Vue 3.5、TypeScript 5.6、Vite 5.4、Tailwind CSS 4（beta）、Pinia 2.2、Vue Router 4.4、vue-i18n 10、Axios 1.7 |
-| Backend | Fastify 5、Prisma 5、PostgreSQL 16、Redis 7、BullMQ 5、ts-fsrs 4.4、Zod 3.23、Pino 9、jsonwebtoken 9 |
-| LLM SDKs | `@anthropic-ai/sdk`、`openai`、`@google/generative-ai`、`google-auth-library` |
-| 安全 | `@fastify/helmet`、`@fastify/cors`、`@fastify/rate-limit`、`@fastify/cookie`、AES-256-GCM |
-| 測試 | Vitest 2.1（前端 + 後端） |
+| Monorepo | pnpm workspaces（`app/` + `server/`），pnpm 10.33.2 |
+| Frontend | Vue 3.5、TypeScript 6、Vite 8（Rolldown）、Tailwind CSS 4、Pinia 3、Vue Router 5、vue-i18n 11、Axios 1.15 |
+| Backend | Fastify 5.8、Prisma 7（Rust-free + driver adapter）、PostgreSQL 16、Redis 7、BullMQ 5、ts-fsrs 5.3、Zod 4、Pino 10、jsonwebtoken 9 |
+| LLM SDKs | `@anthropic-ai/sdk` 0.90、`openai` 6、`@google/generative-ai` 0.24（deprecated，待遷移至 `@google/genai`）、`google-auth-library` 10 |
+| 安全 | `@fastify/helmet`、`@fastify/cors` 11、`@fastify/rate-limit`、`@fastify/cookie`、AES-256-GCM |
+| 測試 | Vitest 4、happy-dom 20（前端）|
 | 容器 | Docker Compose（dev：postgres + redis） |
 
 ### 目錄結構速覽
@@ -59,11 +59,13 @@ anki-sprache/
 │       ├── router/         # 路由 + 守衛
 │       └── types/          # domain DTO
 ├── server/                 # Fastify API + BullMQ worker
+│   ├── prisma.config.ts    # Prisma 7 設定檔（datasource URL、migrations、seed）
 │   ├── src/
 │   │   ├── app.ts          # Fastify builder（plugin + route 註冊）
 │   │   ├── index.ts        # HTTP 入口
 │   │   ├── worker.ts       # BullMQ worker 入口
 │   │   ├── config/env.ts   # Zod 校驗的環境變數
+│   │   ├── generated/      # `prisma generate` 產物（gitignored，build 時自動產生）
 │   │   ├── modules/        # auth / users / settings / llmKeys / languages / cards / reviews / generation
 │   │   └── shared/
 │   │       ├── crypto/aesGcm.ts
@@ -87,22 +89,25 @@ anki-sprache/
 
 | 項目 | 版本 |
 |---|---|
-| Node.js | `>=20.10.0`（`.nvmrc` 鎖定 `20.18.0`） |
-| pnpm | `9.12.0`（`packageManager` 鎖定） |
+| Node.js | `>=22.20.0`（`.nvmrc` 鎖定 `22.22.2`） |
+| pnpm | `10.33.2`（`packageManager` 鎖定；corepack 自動啟用） |
 | Docker Desktop | 任意近期版本（需能跑 compose v2） |
 
 ### 首次設定
 
 ```bash
+nvm use                           # .nvmrc → 22.22.2（首次須先 nvm install 22.22.2）
 pnpm install                      # 安裝所有 workspace 相依
 pnpm docker:up                    # 啟動 Postgres 16 + Redis 7
 cp .env.example .env              # 根範本
 cp server/.env.example server/.env
 cp app/.env.example app/.env
 # 編輯 .env：填入 GOOGLE_CLIENT_ID、產生 JWT_*_SECRET 與 MASTER_KEY
-pnpm db:migrate                   # 套用 Prisma migrations
+pnpm db:migrate                   # 套用 Prisma migrations（會順便 prisma generate）
 pnpm db:seed                      # 匯入語言種子資料
 ```
+
+> Prisma 7 的 client 產物位於 `server/src/generated/prisma/`（`.gitignore` 已排除）。首次 clone 後必須跑過 `pnpm db:migrate`（或 `pnpm --filter ./server exec prisma generate`），否則 `pnpm dev:server` 會因為找不到產物而失敗。
 
 ### 產出秘鑰
 
@@ -126,15 +131,17 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 | 型別檢查 | `pnpm typecheck` | 全 workspace 跑 `tsc --noEmit` / `vue-tsc --noEmit` |
 | 程式碼檢查 | `pnpm lint` | 目前為 pass-through（尚未導入 ESLint，詳見 C 節） |
 | 測試 | `pnpm test` | 全 workspace 跑 `vitest run` |
-|  | `pnpm --filter server test:watch` | 後端 watch 模式 |
+|  | `pnpm --filter ./server test:watch` | 後端 watch 模式 |
 | 資料庫 | `pnpm db:migrate` | `prisma migrate dev`（含 generate + 套用） |
-|  | `pnpm db:seed` | 執行 `prisma/seed.ts`（`tsx`） |
+|  | `pnpm db:seed` | 由 `prisma.config.ts` 的 `migrations.seed` 呼叫 `tsx prisma/seed.ts` |
 |  | `pnpm db:studio` | Prisma Studio（port 5555） |
 | Docker | `pnpm docker:up` | 背景啟動 postgres + redis |
 |  | `pnpm docker:down` | 停止容器（volumes 保留） |
-| 正式執行 | `pnpm --filter server start` | `node --env-file=.env dist/index.js` |
-|  | `pnpm --filter server start:worker` | 啟動已 build 的 worker |
-|  | `pnpm --filter app preview` | 預覽前端 production 打包 |
+| 正式執行 | `pnpm --filter ./server start` | `node --env-file=.env dist/index.js` |
+|  | `pnpm --filter ./server start:worker` | 啟動已 build 的 worker |
+|  | `pnpm --filter ./app preview` | 預覽前端 production 打包 |
+
+> pnpm 10 不再做 workspace 名稱的子字串比對。`app` / `server` 的實際 package name 分別是 `anki-sprache-app` / `anki-sprache-server`，所以所有 `--filter` 都改用**路徑前綴**（`./app`、`./server`）比較穩定且不綁名稱。
 
 ### API 文件
 
@@ -146,7 +153,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 ### 格式工具
 
-- **Prettier 3.3**（根 `.prettierrc`）：
+- **Prettier 3.8**（根 `.prettierrc`）：
   - `semi: false`
   - `singleQuote: true`
   - `trailingComma: 'all'`
@@ -158,10 +165,11 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 ### TypeScript
 
-- 前後端皆啟用 `strict: true` 與 `noUncheckedIndexedAccess: true`。
+- 前後端皆使用 **TypeScript 6**；啟用 `strict: true` 與 `noUncheckedIndexedAccess: true`。
 - 前端：`target: ES2022`、`module: ESNext`、`moduleResolution: bundler`、`jsx: preserve`、`noEmit: true`。
 - 後端：`target: ES2022`、`module: NodeNext`、`moduleResolution: NodeNext`、`outDir: dist`；`tsconfig.build.json` 另外排除 `**/*.test.ts`、`**/*.spec.ts`、`__tests__/`。
-- 路徑別名統一 `@/*` → `./src/*`。
+- 路徑別名統一 `@/*` → `./src/*`。Prisma 7 的產物在 `server/src/generated/prisma/`，因此型別與 client 透過 `@/generated/prisma/client.js` 匯入。
+- TS 6 取消了 `node_modules/@types/*` 的自動 include；兩個 tsconfig 都已在 `compilerOptions.types` 顯式列出（`node`、前端再加 `vite/client`、`google.accounts`）。
 
 ### 模組與匯入
 
@@ -190,8 +198,11 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 ### Fastify 後端
 
-- 路由一律使用 `fastify-type-provider-zod`，每個路由有 `schema: { body/params/query/response }`。
-- 例外交給 global `errorHandler`（`shared/plugins/errorHandler.ts`），回應一律為 `{ statusCode, error, message }`，Zod 失敗回 400 + issues。
+- 路由一律使用 `fastify-type-provider-zod` v6，每個路由有 `schema: { body/params/query/response }`。
+- 例外交給 global `errorHandler`（`shared/plugins/errorHandler.ts`），回應一律為 `{ error, message, issues? }`。
+  - 請求 schema 失敗：`hasZodFastifySchemaValidationErrors(error)` → 400 + `issues`（從 `error.validation` 讀）
+  - 回應 schema 失敗：`isResponseSerializationError(error)` → 500 + log
+  - v5+ 不再丟 `ZodError`，請**不要**自行 `instanceof ZodError` 判斷
 - HTTP 錯誤使用 `app.httpErrors.*`（來自 `@fastify/sensible`）。
 - Prisma 交易使用 `prisma.$transaction(async (tx) => { ... })`；跨步驟的寫入請放交易內。
 
@@ -214,16 +225,16 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 | Workspace | 框架 | 環境 | 設定 |
 |---|---|---|---|
-| `app` | Vitest 2.1 | `happy-dom` | `app/vite.config.ts` 的 `test` 區塊，`globals: true` |
-| `server` | Vitest 2.1 | Node.js（預設） | 無獨立 config，使用預設 |
+| `app` | Vitest 4 | `happy-dom` 20 | `app/vite.config.ts` 的 `test` 區塊，`globals: true` |
+| `server` | Vitest 4 | Node.js（預設） | 無獨立 config，使用預設 |
 
 ### 指令
 
 ```bash
 pnpm test                              # 全 workspace
-pnpm --filter app test                 # 前端
-pnpm --filter server test              # 後端
-pnpm --filter server test:watch        # 後端 watch 模式
+pnpm --filter ./app test               # 前端
+pnpm --filter ./server test            # 後端
+pnpm --filter ./server test:watch      # 後端 watch 模式
 ```
 
 ### 現況
@@ -378,13 +389,14 @@ pnpm --filter server test:watch        # 後端 watch 模式
 - **新增前端頁面**：在 `app/src/pages/` 建立 `*.vue`，在 `router/index.ts` 加入路由；需要導航時同步更新 `components/layout/AppHeader.vue`。
 - **新增 Pinia Store**：命名 `*.store.ts`，放 `app/src/stores/`，以 `defineStore('name', () => { ... })` 的組合式風格撰寫。
 - **新增 i18n 鍵**：同時改 `en.json` 與 `zh-TW.json`，保持鍵結構一致。
-- **新增 Prisma 模型**：`schema.prisma` 改完跑 `pnpm db:migrate`（dev 會 `prisma migrate dev`），勿手改 `migrations/*.sql`；種子改動請同步 `prisma/seed.ts`。
+- **新增 Prisma 模型**：`schema.prisma` 改完跑 `pnpm db:migrate`（dev 會 `prisma migrate dev`），勿手改 `migrations/*.sql`；種子改動請同步 `prisma/seed.ts`。Prisma 7 的 client 產物路徑由 schema 的 `generator` block 指定（`../src/generated/prisma`），若需改輸出位置記得同步調整所有 import（目前統一走 `@/generated/prisma/client.js`）。
 
 ### 既有工具必用
 
-- **FSRS 排程**：一切 `UserCardState` 更新必經 `server/src/shared/fsrs/scheduler.ts`；前端**不得**自行計算下次到期日。
+- **FSRS 排程**：一切 `UserCardState` 更新必經 `server/src/shared/fsrs/scheduler.ts`；前端**不得**自行計算下次到期日。`elapsed_days` 已在 scheduler 內部以 `(now - last_review)` 即時計算，**不要**新增回對應的 Prisma 欄位（ts-fsrs v5 已標 `@deprecated`、v6 將移除）。
 - **BullMQ Queue**：新增佇列於 `shared/plugins/bullmq.plugin.ts` 註冊；生成類任務必搭 Redis 鎖（`SET ... NX`）避免同 `userId + date` 重複執行。
 - **LLM 呼叫**：統一透過 `shared/llm/llmClient.ts` 工廠 + `retry.ts` 指數退避，prompt 放 `shared/llm/prompts/`；每次呼叫都必須寫入 `LlmUsageLog`（成功 / 失敗皆是）。
+- **Prisma Client 實例化**：Prisma 7 強制使用 driver adapter。**所有** `new PrismaClient()` 呼叫（`prisma.plugin.ts`、`worker.ts`、`prisma/seed.ts`）都必須傳入 `new PrismaPg({ connectionString: ... })`，且 `DATABASE_URL` 來源是 `prisma.config.ts`（migrate / seed）或 `env.DATABASE_URL`（runtime）。
 - **快取**：`/cards/due` 有 60 秒 Redis 快取、`/cards/:id` 用 ETag；`POST /reviews` 成功後必須走既有的 invalidation（key 樣板 `cards:due:<userId>:*`）。
 
 ### 絕對不要做
@@ -400,9 +412,13 @@ pnpm --filter server test:watch        # 後端 watch 模式
 
 ### 依賴版本注意
 
-- Tailwind CSS 4 目前為 **beta**（`@tailwindcss/vite`），升版前先查 Context7 的官方遷移指引。
-- Vite 5、Vue 3.5、Fastify 5、Prisma 5、Zod 3 皆為較新主版；升版時注意 breaking changes。
-- `ts-fsrs` 的 API 變動頻繁，升版前跑完 review 路徑手動驗證。
+- **Prisma 7**：Rust-free / driver-adapter 架構。`datasource` block 不允許 `url`（要搬去 `prisma.config.ts`）；generator 是 `prisma-client` 而非 `prisma-client-js`，且必須指定 `output`。任何升級只要碰到 Prisma，都要重跑 `pnpm --filter ./server exec prisma generate`。
+- **Zod 4** + **fastify-type-provider-zod 6**：`z.string().email()` / `z.string().url()` 已被替換為頂層 `z.email()` / `z.url()`；fastify 的驗證失敗用官方 guard 判別，見 § C「Fastify 後端」。
+- **Vite 8**：Rolldown 引擎，build 速度快且 chunk 切得更細。我們沒用 `import.meta.hot.accept`，升級沒碰到破壞性變更；CSS 預設 minifier 變成 Lightning CSS。
+- **TypeScript 6**：停止自動 include `@types/*`，我們的 tsconfig 已顯式列出需要的 types。
+- **ts-fsrs 5 → 6 路徑**：`Card.elapsed_days` 已 `@deprecated`，scheduler 中該 input 已改為即時計算。v6 發布時只要把 `scheduler.ts` 的 `elapsed_days` 那一行刪除即可。
+- **`@google/generative-ai` 已 deprecated**：官方繼任者為 `@google/genai`，2026-06-24 之後不會再有新版。`server/src/shared/llm/adapters/google.ts` 需另開任務切換 SDK。
+- **Tailwind CSS 4** 已 GA，不再是 beta。
 
 ### 部署（Zeabur）
 
@@ -460,7 +476,7 @@ Dockerfile 依 Zeabur 命名慣例置於 **repo 根目錄**（`Dockerfile.<servi
    ```
    參考自 Context7: [庫名稱/版本]
    ```
-   多個來源可用逗號分隔，例如：`參考自 Context7: Fastify 5.1, Prisma 5.22, ts-fsrs 4.4`。
+   多個來源可用逗號分隔，例如：`參考自 Context7: Fastify 5.8, Prisma 7.8, ts-fsrs 5.3`。
 3. **嚴禁僅憑內建訓練資料（Knowledge Cutoff）產生第三方 API 程式碼**，除非 Context7 無法提供相關資訊。若查無資料，請在回覆中明確註記：
    ```
    Context7 無資料，依訓練資料提供，請使用者覆核

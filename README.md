@@ -21,12 +21,12 @@
 
 | 層級 | 技術 |
 |------|------|
-| Monorepo | pnpm workspaces（`app/` + `server/`） |
-| 前端 | Vue 3 · TypeScript · Vite · Tailwind CSS 4 · Pinia · Vue Router · vue-i18n |
-| 後端 | Fastify 5（ESM）· Prisma 5 · PostgreSQL 16 · Redis 7 · BullMQ · ts-fsrs · Zod · Pino |
-| LLM | `@anthropic-ai/sdk` · `openai` · `@google/generative-ai` |
+| Monorepo | pnpm 10 workspaces（`app/` + `server/`） |
+| 前端 | Vue 3.5 · TypeScript 6 · Vite 8（Rolldown）· Tailwind CSS 4 · Pinia 3 · Vue Router 5 · vue-i18n 11 |
+| 後端 | Fastify 5.8（ESM）· Prisma 7（Rust-free + driver adapter）· PostgreSQL 16 · Redis 7 · BullMQ · ts-fsrs 5 · Zod 4 · Pino 10 |
+| LLM | `@anthropic-ai/sdk` · `openai` · `@google/generative-ai`（已 deprecated，將遷移至 `@google/genai`） |
 | 安全 | `@fastify/helmet` · `@fastify/cors` · `@fastify/rate-limit` · AES-256-GCM |
-| 測試 | Vitest（前後端皆使用） |
+| 測試 | Vitest 4 · happy-dom 20（前端） |
 | 部署 | Zeabur（Docker-based） |
 
 ---
@@ -52,8 +52,8 @@
 
 ### 環境需求
 
-- **Node.js** `>=20.10.0`（`.nvmrc` 鎖定 `20.18.0`，建議搭配 nvm）
-- **pnpm** `9.12.0`（專案已鎖 `packageManager`）
+- **Node.js** `>=22.20.0`（`.nvmrc` 鎖定 `22.22.2`，建議搭配 nvm）
+- **pnpm** `10.33.2`（專案已鎖 `packageManager`，corepack 會自動啟用）
 - **Docker Desktop**（本機用於跑 Postgres + Redis）
 
 ### 安裝與設定
@@ -82,9 +82,11 @@ cp app/.env.example app/.env
 ### 初始化資料庫
 
 ```bash
-pnpm db:migrate    # 套用 Prisma migrations
+pnpm db:migrate    # 套用 Prisma migrations（順便 prisma generate）
 pnpm db:seed       # 匯入語言種子資料
 ```
+
+> Prisma 7 的 client 產物位於 `server/src/generated/prisma/`（已 gitignore）。第一次 clone 後必須跑過 `pnpm db:migrate`（或 `pnpm --filter ./server exec prisma generate`），否則 `pnpm dev:server` 會找不到 client。
 
 ### 啟動開發環境
 
@@ -183,10 +185,12 @@ anki-sprache/
 
 ```bash
 pnpm test                              # 全 workspace
-pnpm --filter app test                 # 前端
-pnpm --filter server test              # 後端
-pnpm --filter server test:watch        # 後端 watch
+pnpm --filter ./app test               # 前端
+pnpm --filter ./server test            # 後端
+pnpm --filter ./server test:watch      # 後端 watch
 ```
+
+> pnpm 10 不再做 workspace 名稱的子字串比對，workspace 的實際 package 名稱是 `anki-sprache-{app,server}`，所以 `--filter` 一律用路徑前綴（`./app` / `./server`）。
 
 > 測試基礎設施已就位，但目前尚無測試檔。新增時請參考 [`AGENTS.md` § D](./AGENTS.md#d-測試指南-testing-instructions) 的放置慣例。
 
