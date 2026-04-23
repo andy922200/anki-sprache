@@ -1,7 +1,8 @@
 {
-  "name": "server",
-  "version": "0.1.0",
+  "name": "anki-sprache-server",
+  "version": "1.0.0",
   "private": true,
+  "description": "後端 API 與 BullMQ Worker：提供 FSRS 排程、BYOK LLM 生成與 Google OAuth 認證 | Backend API and BullMQ worker: FSRS scheduling, BYOK LLM generation and Google OAuth authentication",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

@@ -1,7 +1,8 @@
 {
-  "name": "app",
-  "version": "0.1.0",
+  "name": "anki-sprache-app",
+  "version": "1.0.0",
   "private": true,
+  "description": "前端 SPA：以 Vue 3 + TypeScript 打造的 Anki 風格多語言學習介面 | Frontend SPA: Anki-style multi-language learning UI built with Vue 3 and TypeScript",
   "type": "module",
   "scripts": {
     "dev": "vite",
