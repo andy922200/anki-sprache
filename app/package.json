@@ -22,15 +22,15 @@
     "@tailwindcss/vite": "^4.2.4",
     "@types/google.accounts": "^0.0.18",
     "@types/node": "^22.19.17",
-    "@vitejs/plugin-vue": "^5.1.4",
+    "@vitejs/plugin-vue": "^6.0.6",
     "@vue/test-utils": "^2.4.6",
-    "happy-dom": "^15.11.6",
+    "happy-dom": "^20.9.0",
     "prettier": "^3.8.3",
     "sass-embedded": "^1.99.0",
     "tailwindcss": "^4.2.4",
-    "typescript": "^5.6.3",
-    "vite": "^5.4.11",
-    "vitest": "^2.1.5",
-    "vue-tsc": "^2.1.10"
+    "typescript": "^6.0.3",
+    "vite": "^8.0.10",
+    "vitest": "^4.1.5",
+    "vue-tsc": "^3.2.7"
   }
 }
