@@ -175,7 +175,7 @@ anki-sprache/
 
 **app 的 build-time env**（Zeabur **Build Arguments** 區塊，不是 runtime env）：`VITE_API_BASE_URL`、`VITE_GOOGLE_CLIENT_ID`
 
-> Prisma migration 會在 `server` 容器啟動時自動執行（`prisma migrate deploy`）。首次部署還需要手動跑一次 `pnpm prisma db seed`。
+> `server` 容器啟動時會自動跑 `prisma migrate deploy` 與種子資料腳本；`prisma/seed.ts` 內有「Language 表為空才寫入」的守衛，既有資料不會被覆寫。
 
 ---
 

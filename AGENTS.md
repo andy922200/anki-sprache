@@ -420,7 +420,7 @@ Dockerfile 依 Zeabur 命名慣例置於 **repo 根目錄**（`Dockerfile.<servi
 
 `app` build-time env：`VITE_API_BASE_URL`、`VITE_GOOGLE_CLIENT_ID`。
 
-`server` 首次部署：Zeabur Console 內執行 `npx prisma migrate deploy && npx prisma db seed` 一次。
+`server` 容器啟動時會自動跑 `prisma migrate deploy` 與 `prisma/seed.ts`；seed 內有 `Language` 表 count 守衛，只會在全新 DB 插入種子資料，既有資料不會被覆寫。
 
 ---
 
