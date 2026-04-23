@@ -412,7 +412,7 @@ pnpm --filter server test:watch        # 後端 watch 模式
 | `redis` | Zeabur Template | `REDIS_URL` |
 | `server` | Docker `Dockerfile.server` | port 3000（公開） |
 | `worker` | Docker `Dockerfile.worker` | 僅內部 |
-| `app` | Docker `Dockerfile.app` | port 80（公開） |
+| `app` | Docker `Dockerfile.app` | port 8080（公開） |
 
 Dockerfile 依 Zeabur 命名慣例置於 **repo 根目錄**（`Dockerfile.<service-name>`）。Zeabur 依每個 service 的 **Service Name** 自動配對到對應 Dockerfile，因此 Zeabur Dashboard 上三個 service 必須命名為 `server` / `worker` / `app`，且 **Root Directory** 欄位保持空白（build context = repo root，Dockerfile 會以 pnpm workspace 方式安裝）。
 

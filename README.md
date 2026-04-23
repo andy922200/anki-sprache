@@ -167,7 +167,7 @@ anki-sprache/
 | `redis` | Zeabur Marketplace | 內部（提供 `REDIS_URL`） |
 | `server` | Docker（`Dockerfile.server`） | port 3000 |
 | `worker` | Docker（`Dockerfile.worker`） | 僅內部 |
-| `app` | Docker（`Dockerfile.app`，nginx serve 靜態檔） | port 80 |
+| `app` | Docker（`Dockerfile.app`，nginx serve 靜態檔） | port 8080 |
 
 > Dockerfile 依 Zeabur 命名慣例放在 repo 根目錄（`Dockerfile.<service-name>`），請將 Zeabur 上三個 service 的名稱分別設為 `server` / `worker` / `app`，平台會自動配對到對應 Dockerfile。Root Directory 欄位保持空白（＝ repo root）。
 
