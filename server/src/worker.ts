@@ -1,7 +1,8 @@
 import { Queue, Worker, type Job } from 'bullmq'
-import { PrismaClient } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 import { Redis } from 'ioredis'
 import pino from 'pino'
+import { PrismaClient } from './generated/prisma/client.js'
 import { env, isDev } from './config/env.js'
 import { QUEUE_NAMES } from './shared/plugins/bullmq.plugin.js'
 import {
@@ -23,7 +24,8 @@ const log = pino({
 })
 
 async function main() {
-  const prisma = new PrismaClient()
+  const adapter = new PrismaPg({ connectionString: env.DATABASE_URL })
+  const prisma = new PrismaClient({ adapter })
   await prisma.$connect()
   const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null })
   const connection = { url: env.REDIS_URL }

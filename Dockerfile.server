@@ -30,8 +30,10 @@ COPY --from=build /repo/package.json /repo/pnpm-lock.yaml /repo/pnpm-workspace.y
 COPY --from=build /repo/node_modules ./node_modules
 COPY --from=build /repo/server/package.json ./server/package.json
 COPY --from=build /repo/server/dist ./server/dist
+COPY --from=build /repo/server/src/generated ./server/src/generated
 COPY --from=build /repo/server/prisma ./server/prisma
+COPY --from=build /repo/server/prisma.config.ts ./server/prisma.config.ts
 COPY --from=build /repo/server/node_modules ./server/node_modules
 WORKDIR /repo/server
 EXPOSE 3000
-CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node_modules/.bin/tsx prisma/seed.ts && node dist/index.js"]

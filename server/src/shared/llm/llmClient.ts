@@ -1,4 +1,4 @@
-import type { LlmProvider, PrismaClient } from '@prisma/client'
+import type { LlmProvider, PrismaClient } from '@/generated/prisma/client.js'
 import { decryptSecret } from '@/shared/crypto/aesGcm.js'
 import { createOpenAIAdapter } from './adapters/openai.js'
 import { createAnthropicAdapter } from './adapters/anthropic.js'

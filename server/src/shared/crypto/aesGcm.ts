@@ -9,10 +9,16 @@ function masterKey(): Buffer {
 }
 
 export interface EncryptedBlob {
-  encryptedKey: Buffer
-  iv: Buffer
-  authTag: Buffer
+  encryptedKey: Uint8Array<ArrayBuffer>
+  iv: Uint8Array<ArrayBuffer>
+  authTag: Uint8Array<ArrayBuffer>
   keyFingerprint: string
+}
+
+function cloneToU8(src: Uint8Array): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(new ArrayBuffer(src.byteLength))
+  out.set(src)
+  return out
 }
 
 export function encryptSecret(plaintext: string): EncryptedBlob {
@@ -21,7 +27,12 @@ export function encryptSecret(plaintext: string): EncryptedBlob {
   const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
   const authTag = cipher.getAuthTag()
   const fingerprint = createHash('sha256').update(plaintext).digest('hex').slice(0, 12)
-  return { encryptedKey: encrypted, iv, authTag, keyFingerprint: fingerprint }
+  return {
+    encryptedKey: cloneToU8(encrypted),
+    iv: cloneToU8(iv),
+    authTag: cloneToU8(authTag),
+    keyFingerprint: fingerprint,
+  }
 }
 
 export function decryptSecret(blob: {

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { OAuth2Client } from 'google-auth-library'
-import type { PrismaClient, User } from '@prisma/client'
+import type { PrismaClient, User } from '@/generated/prisma/client.js'
 import jwt from 'jsonwebtoken'
 import { env } from '@/config/env.js'
 

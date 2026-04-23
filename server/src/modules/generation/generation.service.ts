@@ -1,4 +1,4 @@
-import type { LlmProvider, PrismaClient, VocabularyCard } from '@prisma/client'
+import type { LlmProvider, PrismaClient, VocabularyCard } from '@/generated/prisma/client.js'
 import type { Redis } from 'ioredis'
 import { buildDailyWordsPrompt, wordResponseSchema, type WordItem } from '@/shared/llm/prompts/dailyWords.js'
 import { getAdapterForUser } from '@/shared/llm/llmClient.js'

@@ -1,5 +1,5 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
-import type { UserSettings } from '@prisma/client'
+import type { UserSettings } from '@/generated/prisma/client.js'
 import { z } from 'zod'
 
 const CEFR = z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2'])

@@ -1,6 +1,8 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
+import { PrismaClient } from '../src/generated/prisma/client.js'
 
-const prisma = new PrismaClient()
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! })
+const prisma = new PrismaClient({ adapter })
 
 const LANGUAGES = [
   { code: 'de', name: 'German', nativeName: 'Deutsch', enabled: true },
@@ -12,6 +14,12 @@ const LANGUAGES = [
 ]
 
 async function main() {
+  const existing = await prisma.language.count()
+  if (existing > 0) {
+    console.log(`Language table already populated (${existing} rows), skipping seed.`)
+    return
+  }
+
   for (const lang of LANGUAGES) {
     await prisma.language.upsert({
       where: { code: lang.code },

@@ -7,7 +7,7 @@ import {
   type Card as FsrsCardInternal,
   type Grade,
 } from 'ts-fsrs'
-import type { FsrsRating, FsrsState, UserCardState } from '@prisma/client'
+import type { FsrsRating, FsrsState, UserCardState } from '@/generated/prisma/client.js'
 
 const fsrs = new FSRS(
   generatorParameters({
@@ -44,6 +44,7 @@ export interface ScheduleResult {
     difficulty: number
     elapsedDays: number
     scheduledDays: number
+    learningSteps: number
     reps: number
     lapses: number
     state: FsrsState
@@ -67,6 +68,7 @@ export function scheduleReview(
     | 'difficulty'
     | 'elapsedDays'
     | 'scheduledDays'
+    | 'learningSteps'
     | 'reps'
     | 'lapses'
     | 'state'
@@ -82,7 +84,7 @@ export function scheduleReview(
         difficulty: current.difficulty,
         elapsed_days: current.elapsedDays,
         scheduled_days: current.scheduledDays,
-        learning_steps: 0,
+        learning_steps: current.learningSteps,
         reps: current.reps,
         lapses: current.lapses,
         state: PRISMA_TO_STATE[current.state],
@@ -99,6 +101,7 @@ export function scheduleReview(
       difficulty: entry.card.difficulty,
       elapsedDays: entry.card.elapsed_days,
       scheduledDays: entry.card.scheduled_days,
+      learningSteps: entry.card.learning_steps,
       reps: entry.card.reps,
       lapses: entry.card.lapses,
       state: STATE_TO_PRISMA[entry.card.state],
