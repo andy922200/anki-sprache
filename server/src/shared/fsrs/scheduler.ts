@@ -82,6 +82,7 @@ export function scheduleReview(
         difficulty: current.difficulty,
         elapsed_days: current.elapsedDays,
         scheduled_days: current.scheduledDays,
+        learning_steps: 0,
         reps: current.reps,
         lapses: current.lapses,
         state: PRISMA_TO_STATE[current.state],
