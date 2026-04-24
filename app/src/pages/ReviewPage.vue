@@ -28,7 +28,9 @@ const flipCardRef = ref<InstanceType<typeof FlipCard> | null>(null)
 onMounted(async () => {
   if (isPractice.value) {
     await cards.loadToday()
-  } else if (cards.queue.length === 0) {
+  } else if (!cards.CURRENT) {
+    // Queue may be non-empty but fully consumed (cursor past end) from a
+    // previous session — treat that the same as empty and refetch.
     await cards.loadDue(50)
   }
   startedAt.value = Date.now()
