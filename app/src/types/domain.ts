@@ -89,6 +89,14 @@ export interface LogbookPage {
   nextCursor: string | null
 }
 
+export interface UpgradeResultSummaryDto {
+  completedAt: string
+  upgraded: number
+  skipped: number
+  failed: number
+  firstErrorReason: string | null
+}
+
 export interface GenerationStatusDto {
   done: boolean
   cardIds: string[]
@@ -96,4 +104,5 @@ export interface GenerationStatusDto {
   lastError: string | null
   upgradeInFlight: boolean
   lastUpgradeError: string | null
+  lastUpgradeResult: UpgradeResultSummaryDto | null
 }

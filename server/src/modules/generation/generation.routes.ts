@@ -3,6 +3,7 @@ import type { Queue } from 'bullmq'
 import { z } from 'zod'
 import { QUEUE_NAMES } from '@/shared/plugins/bullmq.plugin.js'
 import { isDev } from '@/config/env.js'
+import { upgradeResultKey, type UpgradeResultSummary } from './generation.service.js'
 
 /**
  * True if the user has a user-generation job currently queued, active, or
@@ -150,6 +151,15 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
             lastError: z.string().nullable(),
             upgradeInFlight: z.boolean(),
             lastUpgradeError: z.string().nullable(),
+            lastUpgradeResult: z
+              .object({
+                completedAt: z.string(),
+                upgraded: z.number().int().nonnegative(),
+                skipped: z.number().int().nonnegative(),
+                failed: z.number().int().nonnegative(),
+                firstErrorReason: z.string().nullable(),
+              })
+              .nullable(),
           }),
         },
       },
@@ -162,7 +172,7 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
       const today = new Date().toISOString().slice(0, 10)
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
 
-      const [log, upgradeInFlight, recentUpgradeFail] = await Promise.all([
+      const [log, upgradeInFlight, recentUpgradeFail, upgradeResultRaw] = await Promise.all([
         app.prisma.dailyGenerationLog.findUnique({
           where: {
             userId_generationDate_languageCode: {
@@ -182,11 +192,15 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
           },
           orderBy: { createdAt: 'desc' },
         }),
+        app.redis.get(upgradeResultKey(userId)),
       ])
 
       // Only surface a stale upgrade error once no upgrade job is still in
       // flight — otherwise BullMQ may still succeed on retry.
       const lastUpgradeError = upgradeInFlight ? null : recentUpgradeFail?.errorCode ?? null
+      const lastUpgradeResult: UpgradeResultSummary | null = upgradeResultRaw
+        ? (JSON.parse(upgradeResultRaw) as UpgradeResultSummary)
+        : null
 
       if (log) {
         return {
@@ -196,6 +210,7 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
           lastError: null,
           upgradeInFlight,
           lastUpgradeError,
+          lastUpgradeResult,
         }
       }
 
@@ -211,6 +226,7 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
           lastError: null,
           upgradeInFlight,
           lastUpgradeError,
+          lastUpgradeResult,
         }
       }
 
@@ -233,6 +249,7 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
         lastError: recentFail?.errorCode ?? null,
         upgradeInFlight,
         lastUpgradeError,
+        lastUpgradeResult,
       }
     },
   )

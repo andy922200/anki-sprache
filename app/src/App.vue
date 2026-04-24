@@ -1,15 +1,27 @@
 <script setup lang="ts">
+import { watch } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
+import { useGenerationStore } from '@/stores/generation.store'
 import { useTheme } from '@/composables/useTheme'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppToast from '@/components/common/AppToast.vue'
 import GlobalBusyOverlay from '@/components/common/GlobalBusyOverlay.vue'
 
 const auth = useAuthStore()
+const generation = useGenerationStore()
 useTheme()
 // Kick off hydration eagerly. The router's beforeEach guard also awaits
 // the same promise, so this just warms it up before navigation runs.
 void auth.hydrate()
+
+watch(
+  () => auth.IS_AUTHENTICATED,
+  (isAuth) => {
+    if (isAuth) void generation.bootstrap()
+    else generation.reset()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

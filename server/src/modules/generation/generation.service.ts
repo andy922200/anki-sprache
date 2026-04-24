@@ -603,6 +603,19 @@ export interface UpgradeExamplesResult {
 
 const UPGRADE_LOCK_TTL_SECONDS = 600
 const UPGRADE_SENTENCES_PER_CARD = 2
+const UPGRADE_RESULT_TTL_SECONDS = 60 * 60 * 24
+
+export interface UpgradeResultSummary {
+  completedAt: string
+  upgraded: number
+  skipped: number
+  failed: number
+  firstErrorReason: string | null
+}
+
+export function upgradeResultKey(userId: string): string {
+  return `upgrade:last-result:${userId}`
+}
 
 /**
  * Regenerate example sentences for every `UserCardState` card that lacks
@@ -763,6 +776,20 @@ export async function upgradeExamplesForUser(
       const cacheKeys = await redis.keys(`cards:due:${userId}:*`)
       if (cacheKeys.length) await redis.del(...cacheKeys)
     }
+
+    const summary: UpgradeResultSummary = {
+      completedAt: new Date().toISOString(),
+      upgraded: upgradedCardIds.length,
+      skipped,
+      failed: failed.length,
+      firstErrorReason: failed[0]?.reason ?? null,
+    }
+    await redis.set(
+      upgradeResultKey(userId),
+      JSON.stringify(summary),
+      'EX',
+      UPGRADE_RESULT_TTL_SECONDS,
+    )
 
     return {
       upgradedCardIds,

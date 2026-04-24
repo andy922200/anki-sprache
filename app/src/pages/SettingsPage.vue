@@ -8,6 +8,7 @@ import AppButton from '@/components/common/AppButton.vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { useSettingsStore } from '@/stores/settings.store'
 import { useUiStore } from '@/stores/ui.store'
+import { useGenerationStore } from '@/stores/generation.store'
 import * as usersApi from '@/api/users.api'
 import * as languagesApi from '@/api/languages.api'
 import * as generationApi from '@/api/generation.api'
@@ -24,6 +25,7 @@ import type {
 const auth = useAuthStore()
 const settings = useSettingsStore()
 const ui = useUiStore()
+const generation = useGenerationStore()
 const { t } = useI18n()
 
 const languages = ref<LanguageDto[]>([])
@@ -32,7 +34,7 @@ const timezone = ref('UTC')
 const draft = ref<UserSettingsDto | null>(null)
 const saving = ref(false)
 const keys = ref<MaskedKeyDto[]>([])
-const upgrading = ref(false)
+const queuingUpgrade = ref(false)
 
 const cefrOptions: CEFR[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
 const providerOptions: (LlmProvider | '')[] = ['', 'OPENAI', 'ANTHROPIC', 'GOOGLE']
@@ -57,15 +59,28 @@ const modelPlaceholder = computed(() => {
   return p ? defaultModelsByProvider[p] : 'Pick a provider first'
 })
 
-const POLL_INTERVAL_MS = 3000
-const POLL_MAX_ATTEMPTS = 50
-
 const preferredProvider = computed<LlmProvider | null>(
   () => settings.settings?.preferredLlmProvider ?? null,
 )
 
-const upgradeDisabledReason = computed<'provider' | 'key' | null>(() => {
+const upgradeInFlight = computed(() => generation.UPGRADE_IN_FLIGHT)
+
+const hasUpgradeRelevantUnsaved = computed(() => {
+  if (!draft.value || !settings.settings) return false
+  const s = settings.settings
+  const d = draft.value
+  return (
+    d.targetLanguageCode !== s.targetLanguageCode ||
+    d.nativeLanguageCode !== s.nativeLanguageCode ||
+    d.cefrLevel !== s.cefrLevel ||
+    (d.preferredLlmProvider ?? null) !== (s.preferredLlmProvider ?? null) ||
+    (d.preferredLlmModel ?? null) !== (s.preferredLlmModel ?? null)
+  )
+})
+
+const upgradeDisabledReason = computed<'unsaved' | 'provider' | 'key' | null>(() => {
   if (!settings.settings) return null
+  if (hasUpgradeRelevantUnsaved.value) return 'unsaved'
   if (!preferredProvider.value) return 'provider'
   const hasKey = keys.value.some((k) => k.provider === preferredProvider.value)
   return hasKey ? null : 'key'
@@ -115,9 +130,8 @@ async function save() {
 }
 
 async function onUpgradeExamples() {
-  if (upgrading.value) return
-  upgrading.value = true
-  ui.beginBusy(t('settings.upgradeInProgress'))
+  if (queuingUpgrade.value || upgradeInFlight.value) return
+  queuingUpgrade.value = true
   try {
     const res = await generationApi.upgradeExamples()
     if (res.status === 'already-running') {
@@ -125,28 +139,10 @@ async function onUpgradeExamples() {
     } else {
       ui.toast('info', t('settings.upgradeQueued'))
     }
-
-    let lastError: string | null = null
-    let finished = false
-    for (let i = 0; i < POLL_MAX_ATTEMPTS; i++) {
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-      const s = await generationApi.getStatus()
-      if (s.lastUpgradeError) lastError = s.lastUpgradeError
-      if (!s.upgradeInFlight) {
-        finished = true
-        break
-      }
-    }
-
-    if (!finished) {
-      ui.toast('error', t('settings.upgradeTooSlow'))
-      return
-    }
-    if (lastError) {
-      ui.toast('error', t('settings.upgradeFailed', { error: lastError }))
-      return
-    }
-    ui.toast('success', t('settings.upgradeSuccess'))
+    // Refresh + let the global store take over polling so the user can
+    // navigate freely; it'll toast the summary when the job completes.
+    await generation.refresh()
+    generation.startUpgradePolling()
   } catch (err) {
     if (axios.isAxiosError(err)) {
       const msg = String(err.response?.data?.message ?? '')
@@ -162,8 +158,7 @@ async function onUpgradeExamples() {
       ui.toast('error', t('settings.upgradeFailed', { error: 'unknown' }))
     }
   } finally {
-    upgrading.value = false
-    ui.endBusy()
+    queuingUpgrade.value = false
   }
 }
 </script>
@@ -265,12 +260,15 @@ async function onUpgradeExamples() {
       <div class="flex flex-wrap items-center gap-3">
         <AppButton
           variant="secondary"
-          :disabled="upgrading || !!upgradeDisabledReason"
+          :disabled="queuingUpgrade || upgradeInFlight || !!upgradeDisabledReason"
           @click="onUpgradeExamples"
         >
-          {{ upgrading ? t('settings.upgradeInProgress') : t('settings.upgradeButton') }}
+          {{ upgradeInFlight ? t('settings.upgradeInProgress') : t('settings.upgradeButton') }}
         </AppButton>
-        <span v-if="upgradeDisabledReason === 'provider'" class="text-xs text-ink-muted">
+        <span v-if="upgradeDisabledReason === 'unsaved'" class="text-xs text-amber-600 dark:text-amber-400">
+          {{ t('settings.upgradeDisabledUnsaved') }}
+        </span>
+        <span v-else-if="upgradeDisabledReason === 'provider'" class="text-xs text-ink-muted">
           {{ t('settings.upgradeDisabledNoProvider') }}
         </span>
         <span v-else-if="upgradeDisabledReason === 'key' && preferredProvider" class="text-xs text-ink-muted">
