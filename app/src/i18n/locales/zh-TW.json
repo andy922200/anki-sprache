@@ -66,6 +66,14 @@
     "meaning": "意思",
     "examples": "例句"
   },
+  "card": {
+    "audio": {
+      "play": "播放發音",
+      "generating": "正在產生音檔…",
+      "subtext": "合成語音中 — 已過 {seconds} 秒。",
+      "error": "音檔播放失敗"
+    }
+  },
   "rating": {
     "again": "再次",
     "hard": "困難",

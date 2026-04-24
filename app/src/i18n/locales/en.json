@@ -66,6 +66,14 @@
     "meaning": "Meaning",
     "examples": "Examples"
   },
+  "card": {
+    "audio": {
+      "play": "Play pronunciation",
+      "generating": "Generating audio…",
+      "subtext": "Synthesising speech — {seconds}s elapsed.",
+      "error": "Couldn't play audio"
+    }
+  },
   "rating": {
     "again": "Again",
     "hard": "Hard",

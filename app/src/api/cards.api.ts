@@ -15,3 +15,17 @@ export async function getToday(): Promise<CardDto[]> {
   const axios = useAxios()
   return (await axios.get<CardDto[]>('/cards/today')).data
 }
+
+export async function fetchLemmaAudio(cardId: string): Promise<string> {
+  const axios = useAxios()
+  const res = await axios.post<{ audioUrl: string }>(`/cards/${cardId}/lemma/audio`)
+  return res.data.audioUrl
+}
+
+export async function fetchExampleAudio(cardId: string, exampleId: string): Promise<string> {
+  const axios = useAxios()
+  const res = await axios.post<{ audioUrl: string }>(
+    `/cards/${cardId}/examples/${exampleId}/audio`,
+  )
+  return res.data.audioUrl
+}

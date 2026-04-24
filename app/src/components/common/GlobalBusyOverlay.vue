@@ -28,6 +28,9 @@ watch(
 
 const progressPct = computed(() => Math.min(95, Math.floor((elapsedSec.value / 25) * 100)))
 const label = computed(() => ui.busyLabel ?? t('generation.generating'))
+const subtext = computed(() =>
+  t(ui.busySubtextKey ?? 'generation.subtext', { seconds: elapsedSec.value }),
+)
 </script>
 
 <template>
@@ -41,24 +44,25 @@ const label = computed(() => ui.busyLabel ?? t('generation.generating'))
   >
     <div
       v-if="ui.isBusy"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      :class="ui.busyQuiet ? 'bg-transparent cursor-progress' : 'bg-black/40 backdrop-blur-sm'"
       role="status"
       aria-live="polite"
       aria-busy="true"
+      :aria-label="label"
       @keydown.stop
       @keyup.stop
       @keypress.stop
     >
       <div
+        v-if="!ui.busyQuiet"
         class="w-full max-w-sm rounded-card border border-border bg-white p-6 shadow-lg dark:border-border-dark dark:bg-surface-dark-muted"
       >
         <div class="flex items-center gap-3">
           <span class="spinner" aria-hidden="true" />
           <div class="flex-1">
             <p class="font-medium">{{ label }}</p>
-            <p class="mt-1 text-sm text-ink-muted">
-              {{ t('generation.subtext', { seconds: elapsedSec }) }}
-            </p>
+            <p class="mt-1 text-sm text-ink-muted">{{ subtext }}</p>
           </div>
         </div>
         <div

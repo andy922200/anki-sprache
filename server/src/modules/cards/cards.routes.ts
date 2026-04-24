@@ -1,5 +1,7 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
+import { ensureAudio } from '@/modules/audio/audio.service.js'
+import { isDev } from '@/config/env.js'
 
 const CEFR = z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2'])
 const FsrsState = z.enum(['NEW', 'LEARNING', 'REVIEW', 'RELEARNING'])
@@ -21,7 +23,7 @@ const exampleDto = z.object({
   id: z.string(),
   text: z.string(),
   translation: z.string(),
-  audioUrl: z.string().nullable(),
+  audioUrl: z.url().nullable(),
   orderIndex: z.number(),
 })
 
@@ -35,6 +37,7 @@ const cardDto = z.object({
   ipa: z.string().nullable(),
   translation: z.string(),
   cefrLevel: CEFR,
+  audioUrl: z.url().nullable(),
   examples: z.array(exampleDto),
   state: z
     .object({
@@ -45,6 +48,9 @@ const cardDto = z.object({
     })
     .nullable(),
 })
+
+const audioResponse = z.object({ audioUrl: z.url() })
+const AUDIO_RATE_LIMIT = { max: isDev ? 200 : 60, timeWindow: '1 hour' } as const
 
 const DUE_CACHE_TTL = 60
 
@@ -126,6 +132,7 @@ export const cardsRoutes: FastifyPluginAsyncZod = async (app) => {
           ipa: s.card.ipa,
           translation: s.card.translations[0]?.translation ?? '',
           cefrLevel: s.card.cefrLevel,
+          audioUrl: s.card.audioUrl,
           examples: exs.map((e) => ({
             id: e.id,
             text: e.text,
@@ -214,6 +221,7 @@ export const cardsRoutes: FastifyPluginAsyncZod = async (app) => {
           ipa: s.card.ipa,
           translation: s.card.translations[0]?.translation ?? '',
           cefrLevel: s.card.cefrLevel,
+          audioUrl: s.card.audioUrl,
           examples: exs.map((e) => ({
             id: e.id,
             text: e.text,
@@ -294,6 +302,7 @@ export const cardsRoutes: FastifyPluginAsyncZod = async (app) => {
         ipa: card.ipa,
         translation: card.translations[0]?.translation ?? '',
         cefrLevel: card.cefrLevel,
+        audioUrl: card.audioUrl,
         examples: examples.map((e) => ({
           id: e.id,
           text: e.text,
@@ -310,6 +319,36 @@ export const cardsRoutes: FastifyPluginAsyncZod = async (app) => {
             }
           : null,
       }
+    },
+  )
+
+  app.post(
+    '/:cardId/lemma/audio',
+    {
+      config: { rateLimit: AUDIO_RATE_LIMIT },
+      schema: {
+        params: z.object({ cardId: z.string() }),
+        response: { 200: audioResponse },
+      },
+    },
+    async (req) => {
+      const audioUrl = await ensureAudio(app.prisma, app.redis, 'lemma', req.params.cardId)
+      return { audioUrl }
+    },
+  )
+
+  app.post(
+    '/:cardId/examples/:exampleId/audio',
+    {
+      config: { rateLimit: AUDIO_RATE_LIMIT },
+      schema: {
+        params: z.object({ cardId: z.string(), exampleId: z.string() }),
+        response: { 200: audioResponse },
+      },
+    },
+    async (req) => {
+      const audioUrl = await ensureAudio(app.prisma, app.redis, 'example', req.params.exampleId)
+      return { audioUrl }
     },
   )
 }

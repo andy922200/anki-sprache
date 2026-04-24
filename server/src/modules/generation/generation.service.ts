@@ -6,6 +6,7 @@ import {
   cardAdjustmentResponseSchema,
 } from '@/shared/llm/prompts/exampleUpgrade.js'
 import { getAdapterForUser } from '@/shared/llm/llmClient.js'
+import { pruneExamples } from '@/modules/audio/audio.service.js'
 
 export interface GenerateForUserInput {
   userId: string
@@ -255,6 +256,7 @@ export async function generateForUser(
                 },
               })
             }
+            await pruneExamples(prisma, card.id, settings.cefrLevel)
           } else {
             // Level's examples exist but maybe not in this native language.
             // Backfill translations for those examples.
@@ -531,6 +533,7 @@ export async function generateAdditionalForUser(
                 },
               })
             }
+            await pruneExamples(prisma, card.id, settings.cefrLevel)
           } else {
             for (let idx = 0; idx < existingAtLevel.length && idx < item.sentences.length; idx++) {
               const s = item.sentences[idx]!
@@ -801,6 +804,10 @@ export async function upgradeExamplesForUser(
               })
             }
           })
+
+          if (newExamples.length > 0) {
+            await pruneExamples(prisma, card.id, targetCefr)
+          }
         }
 
         await prisma.llmUsageLog.create({

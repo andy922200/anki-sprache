@@ -14,6 +14,8 @@ interface UiState {
   toasts: Toast[]
   isBusy: boolean
   busyLabel: string | null
+  busySubtextKey: string | null
+  busyQuiet: boolean
 }
 
 // Module-scoped: monotonically increasing toast id; no need to be reactive.
@@ -25,6 +27,8 @@ export const useUiStore = defineStore('ui', {
     toasts: [],
     isBusy: false,
     busyLabel: null,
+    busySubtextKey: null,
+    busyQuiet: false,
   }),
   actions: {
     setTheme(t: ThemePref) {
@@ -40,13 +44,17 @@ export const useUiStore = defineStore('ui', {
     dismiss(id: number) {
       this.toasts = this.toasts.filter((t) => t.id !== id)
     },
-    beginBusy(label: string) {
+    beginBusy(label: string, subtextKey?: string, quiet = false) {
       this.isBusy = true
       this.busyLabel = label
+      this.busySubtextKey = subtextKey ?? null
+      this.busyQuiet = quiet
     },
     endBusy() {
       this.isBusy = false
       this.busyLabel = null
+      this.busySubtextKey = null
+      this.busyQuiet = false
     },
   },
 })

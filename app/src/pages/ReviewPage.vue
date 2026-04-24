@@ -23,6 +23,7 @@ const isPractice = computed(() => route.query.practice === 'true')
 
 const startedAt = ref(Date.now())
 const lastChoiceCorrect = ref<boolean | null>(null)
+const flipCardRef = ref<InstanceType<typeof FlipCard> | null>(null)
 
 onMounted(async () => {
   if (isPractice.value) {
@@ -60,6 +61,9 @@ function onKey(e: KeyboardEvent) {
     if (e.key === '3') rate('GOOD')
     if (e.key === '4') rate('EASY')
   }
+  if (e.key === 'p' || e.key === 'P') {
+    flipCardRef.value?.playLemma()
+  }
 }
 
 const distractors = computed(() =>
@@ -76,7 +80,7 @@ const distractors = computed(() =>
         </span>
         {{ t('review.remaining', { count: cards.REMAINING }) }}
       </p>
-      <FlipCard v-if="mode === 'FLIP'" :card="cards.CURRENT" />
+      <FlipCard v-if="mode === 'FLIP'" ref="flipCardRef" :card="cards.CURRENT" />
       <MultipleChoice
         v-else
         :card="cards.CURRENT"

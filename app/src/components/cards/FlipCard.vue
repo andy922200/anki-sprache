@@ -2,6 +2,8 @@
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { CardDto } from '@/types/domain'
+import { fetchExampleAudio, fetchLemmaAudio } from '@/api/cards.api'
+import AudioButton from './AudioButton.vue'
 
 interface Props {
   card: CardDto
@@ -10,6 +12,8 @@ const props = defineProps<Props>()
 const { t } = useI18n()
 
 const flipped = ref(false)
+const lemmaAudioRef = ref<InstanceType<typeof AudioButton> | null>(null)
+const exampleAudioRefs = ref<Array<InstanceType<typeof AudioButton> | null>>([])
 
 watch(
   () => props.card.id,
@@ -17,6 +21,11 @@ watch(
     flipped.value = false
   },
 )
+
+defineExpose({
+  playLemma: () => lemmaAudioRef.value?.play(),
+  playFirstExample: () => exampleAudioRefs.value[0]?.play(),
+})
 </script>
 
 <template>
@@ -37,7 +46,15 @@ watch(
           <p v-if="card.gender" class="mb-2 text-sm uppercase tracking-wide text-ink-muted">
             {{ card.gender.toLowerCase() }}
           </p>
-          <h2 class="text-4xl font-semibold wrap-break-word">{{ card.lemma }}</h2>
+          <div class="flex items-center gap-3 wrap-break-word">
+            <h2 class="text-4xl font-semibold">{{ card.lemma }}</h2>
+            <AudioButton
+              ref="lemmaAudioRef"
+              size="md"
+              :initial-url="card.audioUrl"
+              :fetcher="() => fetchLemmaAudio(card.id)"
+            />
+          </div>
           <p v-if="card.ipa" class="mt-3 text-sm text-ink-muted wrap-break-word">/{{ card.ipa }}/</p>
           <p v-if="card.partOfSpeech" class="mt-2 text-xs uppercase tracking-wider text-ink-muted">
             {{ card.partOfSpeech.toLowerCase() }}
@@ -54,9 +71,19 @@ watch(
           <div v-if="card.examples.length" class="mt-6">
             <p class="mb-2 text-sm uppercase tracking-wide text-ink-muted">{{ t('flipCard.examples') }}</p>
             <ul class="space-y-3">
-              <li v-for="ex in card.examples" :key="ex.id">
-                <p class="text-lg wrap-break-word">{{ ex.text }}</p>
-                <p class="text-sm text-ink-muted wrap-break-word">{{ ex.translation }}</p>
+              <li v-for="(ex, idx) in card.examples" :key="ex.id">
+                <div class="flex items-start gap-2">
+                  <AudioButton
+                    :ref="(el) => (exampleAudioRefs[idx] = el as InstanceType<typeof AudioButton> | null)"
+                    class="mt-0.5 shrink-0"
+                    :initial-url="ex.audioUrl"
+                    :fetcher="() => fetchExampleAudio(card.id, ex.id)"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <p class="text-lg wrap-break-word">{{ ex.text }}</p>
+                    <p class="text-sm text-ink-muted wrap-break-word">{{ ex.translation }}</p>
+                  </div>
+                </div>
               </li>
             </ul>
           </div>

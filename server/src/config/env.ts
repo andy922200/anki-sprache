@@ -26,6 +26,16 @@ const envSchema = z.object({
     .refine((v) => Buffer.from(v, 'base64').length === 32, 'MASTER_KEY must decode to 32 bytes'),
 
   GOOGLE_CLIENT_ID: z.string().min(1),
+
+  // Cloudflare R2 (S3-compatible) for TTS audio storage
+  R2_ACCOUNT_ID: z.string().min(1),
+  R2_ACCESS_KEY_ID: z.string().min(1),
+  R2_SECRET_ACCESS_KEY: z.string().min(1),
+  R2_BUCKET: z.string().min(1),
+  R2_PUBLIC_URL: z.url(),
+
+  // Google Cloud Text-to-Speech REST API key (restricted to TTS)
+  GOOGLE_TTS_API_KEY: z.string().min(1),
 })
 
 export type Env = z.infer<typeof envSchema>

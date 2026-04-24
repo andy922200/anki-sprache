@@ -61,6 +61,7 @@ export interface CardDto {
   ipa: string | null
   translation: string
   cefrLevel: CEFR
+  audioUrl: string | null
   examples: ExampleDto[]
   state: CardStateDto | null
 }
