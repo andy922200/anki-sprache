@@ -118,7 +118,8 @@
     "upgradeTooSlow": "調整花費時間超過預期 — 請檢查 worker 日誌",
     "upgradeDisabledNoProvider": "請先到偏好設定選擇 LLM 提供者並儲存。",
     "upgradeDisabledNoKey": "請先到 API 金鑰頁面新增 {provider} 金鑰。",
-    "upgradeDisabledUnsaved": "你有尚未儲存的設定變更 — 請先按「儲存」再進行調整。"
+    "upgradeDisabledUnsaved": "你有尚未儲存的設定變更 — 請先按「儲存」再進行調整。",
+    "upgradeNeededAfterCefrChange": "已變更 CEFR 等級 — 請補上 LLM 提供者與金鑰後，回到本頁點選「將例句調整到目前等級」。"
   },
   "apiKeys": {
     "title": "API 金鑰",

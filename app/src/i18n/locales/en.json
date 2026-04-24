@@ -118,7 +118,8 @@
     "upgradeTooSlow": "Adjustment is taking longer than expected — check worker logs",
     "upgradeDisabledNoProvider": "Pick a preferred LLM provider and save settings first.",
     "upgradeDisabledNoKey": "Add an API key for {provider} on the API keys page first.",
-    "upgradeDisabledUnsaved": "You have unsaved settings changes — save them before adjusting."
+    "upgradeDisabledUnsaved": "You have unsaved settings changes — save them before adjusting.",
+    "upgradeNeededAfterCefrChange": "CEFR level changed — add an LLM provider and key, then return here and click \"Adjust examples to current level\"."
   },
   "apiKeys": {
     "title": "API keys",

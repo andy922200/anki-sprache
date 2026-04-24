@@ -122,6 +122,13 @@ export const useGenerationStore = defineStore('generation', {
         pollTimer = null
       }
     },
+    // Mark an upgrade result as already surfaced to the user. Call BEFORE
+    // the next refresh() so handleTransition treats it as a stale anchor
+    // and skips its own toast — otherwise we'd double-announce whenever
+    // the caller polls in the foreground.
+    acknowledgeUpgradeCompleted(completedAt: string) {
+      writeLastSeen(completedAt)
+    },
     async bootstrap() {
       const next = await this.refresh()
       if (next?.upgradeInFlight) {

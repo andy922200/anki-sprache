@@ -21,6 +21,7 @@ import type {
   UiLanguage,
   UserSettingsDto,
   MaskedKeyDto,
+  GenerationStatusDto,
 } from '@/types/domain'
 
 const auth = useAuthStore()
@@ -126,6 +127,87 @@ onMounted(async () => {
   }
 })
 
+const POLL_INTERVAL_MS = 3000
+const POLL_MAX_ATTEMPTS = 50
+
+// Enqueue an example-upgrade job and block the UI with GlobalBusyOverlay
+// until it finishes. Mirrors DashboardPage.onGenerate so the user can't
+// wander off to /review before the worker has rewritten the examples.
+// Guards only against double-click on this tab; if a job is already
+// running (ours or another tab's), we still attach and poll to completion.
+async function runUpgradeExamplesBlocking() {
+  if (queuingUpgrade.value) return
+  queuingUpgrade.value = true
+  ui.beginBusy(t('settings.upgradeInProgress'))
+  try {
+    const res = await generationApi.upgradeExamples()
+    if (res.status === 'already-running') {
+      ui.toast('info', t('settings.upgradeRunningExternally'))
+    }
+
+    // Foreground poll: hit the raw API so we don't trip the store's
+    // handleTransition toast, which would double-announce the summary.
+    generation.stopPolling()
+    let finalStatus: GenerationStatusDto | null = null
+    for (let i = 0; i < POLL_MAX_ATTEMPTS; i++) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+      finalStatus = await generationApi.getStatus()
+      if (!finalStatus.upgradeInFlight) break
+    }
+
+    // Pre-ack the result BEFORE refresh so handleTransition doesn't
+    // re-toast the summary we're about to surface ourselves.
+    if (finalStatus?.lastUpgradeResult) {
+      generation.acknowledgeUpgradeCompleted(finalStatus.lastUpgradeResult.completedAt)
+    }
+    await generation.refresh()
+
+    const result = finalStatus?.lastUpgradeResult
+    if (finalStatus && !finalStatus.upgradeInFlight && result) {
+      if (result.failed > 0) {
+        ui.toast(
+          'error',
+          t('settings.upgradePartialSummary', {
+            upgraded: result.upgraded,
+            failed: result.failed,
+            skipped: result.skipped,
+            error: result.firstErrorReason ?? 'unknown',
+          }),
+          8000,
+        )
+      } else {
+        ui.toast(
+          'success',
+          t('settings.upgradeSuccessSummary', {
+            upgraded: result.upgraded,
+            skipped: result.skipped,
+          }),
+          6000,
+        )
+      }
+    } else if (finalStatus?.upgradeInFlight) {
+      ui.toast('error', t('settings.upgradeTooSlow'))
+    }
+  } catch (err) {
+    if (axios.isAxiosError(err)) {
+      const msg = String(err.response?.data?.message ?? '')
+      if (msg.startsWith('LLM_PROVIDER_NOT_SET')) {
+        ui.toast('error', t('settings.upgradeDisabledNoProvider'))
+      } else if (msg.startsWith('LLM_API_KEY_MISSING')) {
+        const provider = msg.split(':')[1] ?? ''
+        ui.toast('error', t('settings.upgradeDisabledNoKey', { provider }))
+      } else {
+        ui.toast('error', t('settings.upgradeFailed', { error: msg || 'error' }))
+      }
+    } else {
+      ui.toast('error', t('settings.upgradeFailed', { error: 'unknown' }))
+    }
+  } finally {
+    ui.endBusy()
+    queuingUpgrade.value = false
+  }
+}
+
 async function save() {
   saving.value = true
   try {
@@ -138,6 +220,7 @@ async function save() {
     if (draft.value) {
       const prevTarget = settings.settings?.targetLanguageCode
       const prevNative = settings.settings?.nativeLanguageCode
+      const prevCefr = settings.settings?.cefrLevel
       await settings.update({
         targetLanguageCode: draft.value.targetLanguageCode,
         nativeLanguageCode: draft.value.nativeLanguageCode,
@@ -154,8 +237,22 @@ async function save() {
         cards.reset()
         void generation.refresh()
       }
+      ui.toast('success', t('settings.saved'))
+
+      // CEFR change → auto-run example upgrade so historical cards pick up
+      // the new level immediately. Without this the user has to remember a
+      // second click, and /review falls back to old-level examples.
+      const cefrChanged = draft.value.cefrLevel !== prevCefr
+      if (cefrChanged) {
+        if (!upgradeDisabledReason.value) {
+          await runUpgradeExamplesBlocking()
+        } else {
+          ui.toast('info', t('settings.upgradeNeededAfterCefrChange'))
+        }
+      }
+    } else {
+      ui.toast('success', t('settings.saved'))
     }
-    ui.toast('success', t('settings.saved'))
   } catch {
     ui.toast('error', t('settings.saveFailed'))
   } finally {
@@ -164,36 +261,7 @@ async function save() {
 }
 
 async function onUpgradeExamples() {
-  if (queuingUpgrade.value || upgradeInFlight.value) return
-  queuingUpgrade.value = true
-  try {
-    const res = await generationApi.upgradeExamples()
-    if (res.status === 'already-running') {
-      ui.toast('info', t('settings.upgradeRunningExternally'))
-    } else {
-      ui.toast('info', t('settings.upgradeQueued'))
-    }
-    // Refresh + let the global store take over polling so the user can
-    // navigate freely; it'll toast the summary when the job completes.
-    await generation.refresh()
-    generation.startUpgradePolling()
-  } catch (err) {
-    if (axios.isAxiosError(err)) {
-      const msg = String(err.response?.data?.message ?? '')
-      if (msg.startsWith('LLM_PROVIDER_NOT_SET')) {
-        ui.toast('error', t('settings.upgradeDisabledNoProvider'))
-      } else if (msg.startsWith('LLM_API_KEY_MISSING')) {
-        const provider = msg.split(':')[1] ?? ''
-        ui.toast('error', t('settings.upgradeDisabledNoKey', { provider }))
-      } else {
-        ui.toast('error', t('settings.upgradeFailed', { error: msg || 'error' }))
-      }
-    } else {
-      ui.toast('error', t('settings.upgradeFailed', { error: 'unknown' }))
-    }
-  } finally {
-    queuingUpgrade.value = false
-  }
+  await runUpgradeExamplesBlocking()
 }
 </script>
 
