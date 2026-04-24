@@ -9,7 +9,6 @@ import LlmSetupCard from '@/components/common/LlmSetupCard.vue'
 import GenerationProgress from '@/components/common/GenerationProgress.vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { useSettingsStore } from '@/stores/settings.store'
-import { useCardsStore } from '@/stores/cards.store'
 import { useUiStore } from '@/stores/ui.store'
 import * as generationApi from '@/api/generation.api'
 import * as cardsApi from '@/api/cards.api'
@@ -18,7 +17,6 @@ import type { GenerationStatusDto, CardDto, LlmProvider, MaskedKeyDto } from '@/
 
 const auth = useAuthStore()
 const settings = useSettingsStore()
-const cards = useCardsStore()
 const ui = useUiStore()
 const router = useRouter()
 const { t } = useI18n()

@@ -124,7 +124,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 | 分類 | 指令 | 作用 |
 |---|---|---|
-| 開發（全部） | `pnpm dev` | 以 `-r --parallel` 同時啟動 `app` 與 `server` |
+| 開發（全部） | `pnpm dev` | 以 `-r --parallel` 同時啟動 `app` 與 `server`（**不含 worker**） |
+|  | `pnpm dev:all` | 同時啟動 `app`、`server` 與 `worker`（log 會混流，除錯時建議改用單一指令） |
 | 開發（單一） | `pnpm dev:app` | Vite dev server，port **5173**（`strictPort: true`） |
 |  | `pnpm dev:server` | Fastify（tsx watch），port **3000** |
 |  | `pnpm dev:worker` | BullMQ worker（獨立程序，正式環境務必拆開） |
@@ -213,7 +214,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 | 常數 | UPPER_SNAKE_CASE | `LOCK_TTL_SECONDS` |
 | Enum 值 | UPPER_SNAKE | `'GOOGLE'`、`'LEARNING'` |
 | API 路徑 | kebab-case | `/me/llm-keys/:provider` |
-| Pinia Store | `*.store.ts`，`defineStore('name', ...)` | `auth.store.ts` |
+| Pinia Store 檔案 | `*.store.ts`，`defineStore('id', { ... })` | `auth.store.ts` |
+| Pinia Store getter | UPPER_SNAKE_CASE（**store 內 computed 屬性的特例**） | `IS_AUTHENTICATED`、`CURRENT`、`REMAINING` |
 
 ### Vue 元件
 
@@ -413,7 +415,12 @@ pnpm --filter ./server test:watch      # 後端 watch 模式
 
 - **新增後端路由**：於 `server/src/modules/<domain>/` 建立 `*.routes.ts` + `*.service.ts` + `*.schema.ts`（Zod），並在 `server/src/app.ts` 統一註冊；務必附 response schema 以讓 `/docs` 自動生成正確。
 - **新增前端頁面**：在 `app/src/pages/` 建立 `*.vue`，在 `router/index.ts` 加入路由；需要導航時同步更新 `components/layout/AppHeader.vue`。
-- **新增 Pinia Store**：命名 `*.store.ts`，放 `app/src/stores/`，以 `defineStore('name', () => { ... })` 的組合式風格撰寫。
+- **新增 Pinia Store**：命名 `*.store.ts`，放 `app/src/stores/`，採 **Options Store** 風格 `defineStore('id', { state: () => ({ ... }), getters: { ... }, actions: { ... } })`：
+  - `state`、actions 名稱沿用 camelCase；**`getters` 一律 UPPER_SNAKE_CASE**（如 `IS_AUTHENTICATED`、`CURRENT`），便於與 state / actions 一眼區分。
+  - getter 用箭頭函式接 `state`：`IS_AUTHENTICATED: (state): boolean => !!state.accessToken`；需要交叉引用其他 getter 時才改用 `function () { return this.OTHER_GETTER }`。
+  - action 內以 `this.foo` 存取 state、`this.BAR` 存取 getter；箭頭函式（如 `setTimeout` 回呼）會自動繼承外層 `this`。
+  - 不得用 closure 宣告私有變數；如需「不暴露給 reactive 系統的可變值」（例如 `hydrationPromise`、`nextToastId`），請放在**模組層級**（`defineStore` 之外）。
+  - 修改 store 暴露面（renaming getter / action）時，務必同步更新 `app/src/router/`、`composables/`、`pages/`、`components/` 中所有 callsite。
 - **新增 i18n 鍵**：同時改 `en.json` 與 `zh-TW.json`，保持鍵結構一致。
 - **新增 Prisma 模型**：`schema.prisma` 改完跑 `pnpm db:migrate`（dev 會 `prisma migrate dev`），勿手改 `migrations/*.sql`；種子改動請同步 `prisma/seed.ts`。Prisma 7 的 client 產物路徑由 schema 的 `generator` block 指定（`../src/generated/prisma`），若需改輸出位置記得同步調整所有 import（目前統一走 `@/generated/prisma/client.js`）。
 

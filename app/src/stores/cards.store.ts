@@ -1,67 +1,59 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
 import type { CardDto, FsrsRating, ReviewMode } from '@/types/domain'
 import * as cardsApi from '@/api/cards.api'
 import * as reviewsApi from '@/api/reviews.api'
 
-export const useCardsStore = defineStore('cards', () => {
-  const queue = ref<CardDto[]>([])
-  const cursor = ref(0)
-  const loading = ref(false)
-  // In practice mode we drill the same deck without touching FSRS state.
-  const practiceMode = ref(false)
+interface CardsState {
+  queue: CardDto[]
+  cursor: number
+  loading: boolean
+  practiceMode: boolean
+}
 
-  const current = computed<CardDto | null>(() => queue.value[cursor.value] ?? null)
-  const remaining = computed(() => Math.max(0, queue.value.length - cursor.value))
-
-  async function loadDue(limit = 50) {
-    loading.value = true
-    practiceMode.value = false
-    try {
-      queue.value = await cardsApi.getDue(limit)
-      cursor.value = 0
-    } finally {
-      loading.value = false
-    }
-  }
-
-  async function loadToday() {
-    loading.value = true
-    practiceMode.value = true
-    try {
-      queue.value = await cardsApi.getToday()
-      cursor.value = 0
-    } finally {
-      loading.value = false
-    }
-  }
-
-  async function submitReview(rating: FsrsRating, mode: ReviewMode, durationMs: number) {
-    const card = current.value
-    if (!card) return
-    // Practice mode: skip the server call so FSRS scheduling stays intact.
-    if (!practiceMode.value) {
-      await reviewsApi.postReview({ cardId: card.id, rating, mode, durationMs })
-    }
-    cursor.value++
-  }
-
-  function reset() {
-    queue.value = []
-    cursor.value = 0
-    practiceMode.value = false
-  }
-
-  return {
-    queue,
-    cursor,
-    current,
-    remaining,
-    loading,
-    practiceMode,
-    loadDue,
-    loadToday,
-    submitReview,
-    reset,
-  }
+export const useCardsStore = defineStore('cards', {
+  state: (): CardsState => ({
+    queue: [],
+    cursor: 0,
+    loading: false,
+    practiceMode: false,
+  }),
+  getters: {
+    CURRENT: (state): CardDto | null => state.queue[state.cursor] ?? null,
+    REMAINING: (state): number => Math.max(0, state.queue.length - state.cursor),
+  },
+  actions: {
+    async loadDue(limit = 50) {
+      this.loading = true
+      this.practiceMode = false
+      try {
+        this.queue = await cardsApi.getDue(limit)
+        this.cursor = 0
+      } finally {
+        this.loading = false
+      }
+    },
+    async loadToday() {
+      this.loading = true
+      this.practiceMode = true
+      try {
+        this.queue = await cardsApi.getToday()
+        this.cursor = 0
+      } finally {
+        this.loading = false
+      }
+    },
+    async submitReview(rating: FsrsRating, mode: ReviewMode, durationMs: number) {
+      const card = this.CURRENT
+      if (!card) return
+      if (!this.practiceMode) {
+        await reviewsApi.postReview({ cardId: card.id, rating, mode, durationMs })
+      }
+      this.cursor++
+    },
+    reset() {
+      this.queue = []
+      this.cursor = 0
+      this.practiceMode = false
+    },
+  },
 })

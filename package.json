@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "pnpm -r --parallel dev",
+    "dev:all": "pnpm --parallel run \"/^dev:(app|server|worker)$/\"",
     "dev:app": "pnpm --filter ./app dev",
     "dev:server": "pnpm --filter ./server dev",
     "dev:worker": "pnpm --filter ./server dev:worker",

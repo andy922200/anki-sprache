@@ -50,10 +50,10 @@ router.beforeEach(async (to) => {
   const auth = useAuthStore()
   await auth.hydrate()
   const isPublic = to.meta.public === true
-  if (!isPublic && !auth.isAuthenticated) {
+  if (!isPublic && !auth.IS_AUTHENTICATED) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  if (to.name === 'login' && auth.isAuthenticated) {
+  if (to.name === 'login' && auth.IS_AUTHENTICATED) {
     return { name: 'dashboard' }
   }
 })

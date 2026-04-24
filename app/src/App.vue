@@ -16,7 +16,7 @@ void auth.hydrate()
     <span class="spinner" aria-label="Loading" />
   </div>
   <div v-else class="flex min-h-full flex-col">
-    <AppHeader v-if="auth.isAuthenticated" />
+    <AppHeader v-if="auth.IS_AUTHENTICATED" />
     <main class="flex-1">
       <RouterView />
     </main>

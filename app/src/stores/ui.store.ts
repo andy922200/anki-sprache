@@ -1,5 +1,4 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
 
 export type ThemePref = 'LIGHT' | 'DARK' | 'SYSTEM'
 export type ToastKind = 'success' | 'error' | 'info'
@@ -10,26 +9,32 @@ export interface Toast {
   message: string
 }
 
-export const useUiStore = defineStore('ui', () => {
-  const themePref = ref<ThemePref>('SYSTEM')
-  const toasts = ref<Toast[]>([])
-  let nextToastId = 1
+interface UiState {
+  themePref: ThemePref
+  toasts: Toast[]
+}
 
-  function setTheme(t: ThemePref) {
-    themePref.value = t
-  }
+// Module-scoped: monotonically increasing toast id; no need to be reactive.
+let nextToastId = 1
 
-  function toast(kind: ToastKind, message: string, ttlMs = 4000) {
-    const id = nextToastId++
-    toasts.value.push({ id, kind, message })
-    setTimeout(() => {
-      toasts.value = toasts.value.filter((t) => t.id !== id)
-    }, ttlMs)
-  }
-
-  function dismiss(id: number) {
-    toasts.value = toasts.value.filter((t) => t.id !== id)
-  }
-
-  return { themePref, toasts, setTheme, toast, dismiss }
+export const useUiStore = defineStore('ui', {
+  state: (): UiState => ({
+    themePref: 'SYSTEM',
+    toasts: [],
+  }),
+  actions: {
+    setTheme(t: ThemePref) {
+      this.themePref = t
+    },
+    toast(kind: ToastKind, message: string, ttlMs = 4000) {
+      const id = nextToastId++
+      this.toasts.push({ id, kind, message })
+      setTimeout(() => {
+        this.toasts = this.toasts.filter((t) => t.id !== id)
+      }, ttlMs)
+    },
+    dismiss(id: number) {
+      this.toasts = this.toasts.filter((t) => t.id !== id)
+    },
+  },
 })

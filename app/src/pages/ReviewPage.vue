@@ -38,7 +38,7 @@ onUnmounted(() => {
 })
 
 async function rate(rating: FsrsRating) {
-  if (!cards.current) return
+  if (!cards.CURRENT) return
   const durationMs = Date.now() - startedAt.value
   try {
     await cards.submitReview(rating, mode.value, durationMs)
@@ -63,23 +63,23 @@ function onKey(e: KeyboardEvent) {
 }
 
 const distractors = computed(() =>
-  cards.queue.filter((c) => c.id !== cards.current?.id).slice(0, 8),
+  cards.queue.filter((c) => c.id !== cards.CURRENT?.id).slice(0, 8),
 )
 </script>
 
 <template>
   <div class="mx-auto flex max-w-3xl flex-col items-center gap-6 p-4 pt-10 sm:p-6">
-    <div v-if="cards.current" class="flex w-full flex-col items-center gap-6">
+    <div v-if="cards.CURRENT" class="flex w-full flex-col items-center gap-6">
       <p class="text-sm text-ink-muted">
         <span v-if="cards.practiceMode" class="mr-2 rounded-full bg-brand-100 px-2 py-0.5 text-xs text-brand-700 dark:bg-brand-700 dark:text-brand-50">
           {{ t('review.practiceBadge') }}
         </span>
-        {{ t('review.remaining', { count: cards.remaining }) }}
+        {{ t('review.remaining', { count: cards.REMAINING }) }}
       </p>
-      <FlipCard v-if="mode === 'FLIP'" :card="cards.current" />
+      <FlipCard v-if="mode === 'FLIP'" :card="cards.CURRENT" />
       <MultipleChoice
         v-else
-        :card="cards.current"
+        :card="cards.CURRENT"
         :distractors="distractors"
         @choose="onChoose"
       />
