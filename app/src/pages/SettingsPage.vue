@@ -117,6 +117,7 @@ async function save() {
 async function onUpgradeExamples() {
   if (upgrading.value) return
   upgrading.value = true
+  ui.beginBusy(t('settings.upgradeInProgress'))
   try {
     const res = await generationApi.upgradeExamples()
     if (res.status === 'already-running') {
@@ -162,6 +163,7 @@ async function onUpgradeExamples() {
     }
   } finally {
     upgrading.value = false
+    ui.endBusy()
   }
 }
 </script>
@@ -178,7 +180,7 @@ async function onUpgradeExamples() {
           <input
             v-model="displayName"
             type="text"
-            class="mt-1 w-full rounded-md border border-brand-100 bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-surface-dark-muted"
+            class="mt-1 w-full rounded-md border border-border bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-border-dark"
           />
         </label>
         <label class="text-sm">
@@ -187,7 +189,7 @@ async function onUpgradeExamples() {
             v-model="timezone"
             type="text"
             :placeholder="t('settings.timezoneHint')"
-            class="mt-1 w-full rounded-md border border-brand-100 bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-surface-dark-muted"
+            class="mt-1 w-full rounded-md border border-border bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-border-dark"
           />
         </label>
       </div>
@@ -200,7 +202,7 @@ async function onUpgradeExamples() {
           {{ t('settings.uiLanguage') }}
           <select
             v-model="draft.uiLanguage"
-            class="mt-1 w-full rounded-md border border-brand-100 bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-surface-dark-muted"
+            class="mt-1 w-full rounded-md border border-border bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-border-dark"
           >
             <option v-for="opt in uiLanguageOptions" :key="opt.value" :value="opt.value">
               {{ opt.label }}
@@ -217,10 +219,10 @@ async function onUpgradeExamples() {
           {{ t('settings.targetLanguage') }}
           <select
             v-model="draft.targetLanguageCode"
-            class="mt-1 w-full rounded-md border border-brand-100 bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-surface-dark-muted"
+            class="mt-1 w-full rounded-md border border-border bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-border-dark"
           >
             <option v-for="l in languages.filter((x) => x.enabled)" :key="l.code" :value="l.code">
-              {{ l.name }} ({{ l.nativeName }})
+              {{ t(`languages.${l.code}`) }} - ({{ l.name }})
             </option>
           </select>
         </label>
@@ -228,16 +230,18 @@ async function onUpgradeExamples() {
           {{ t('settings.nativeLanguage') }}
           <select
             v-model="draft.nativeLanguageCode"
-            class="mt-1 w-full rounded-md border border-brand-100 bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-surface-dark-muted"
+            class="mt-1 w-full rounded-md border border-border bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-border-dark"
           >
-            <option v-for="l in languages" :key="l.code" :value="l.code">{{ l.name }}</option>
+            <option v-for="l in languages" :key="l.code" :value="l.code">
+              {{ t(`languages.${l.code}`) }} - ({{ l.name }})
+            </option>
           </select>
         </label>
         <label class="text-sm">
           {{ t('settings.cefrLevel') }}
           <select
             v-model="draft.cefrLevel"
-            class="mt-1 w-full rounded-md border border-brand-100 bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-surface-dark-muted"
+            class="mt-1 w-full rounded-md border border-border bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-border-dark"
           >
             <option v-for="c in cefrOptions" :key="c" :value="c">{{ c }}</option>
           </select>
@@ -249,7 +253,7 @@ async function onUpgradeExamples() {
             type="number"
             min="1"
             max="30"
-            class="mt-1 w-full rounded-md border border-brand-100 bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-surface-dark-muted"
+            class="mt-1 w-full rounded-md border border-border bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-border-dark"
           />
         </label>
       </div>
@@ -282,7 +286,7 @@ async function onUpgradeExamples() {
           {{ t('settings.preferredProvider') }}
           <select
             v-model="draft.preferredLlmProvider"
-            class="mt-1 w-full rounded-md border border-brand-100 bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-surface-dark-muted"
+            class="mt-1 w-full rounded-md border border-border bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-border-dark"
           >
             <option v-for="p in providerOptions" :key="p || 'none'" :value="p || null">
               {{ p ? t(`provider.${p}`) : t('common.none') }}
@@ -295,7 +299,7 @@ async function onUpgradeExamples() {
             v-model="draft.preferredLlmModel"
             type="text"
             :placeholder="modelPlaceholder"
-            class="mt-1 w-full rounded-md border border-brand-100 bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-surface-dark-muted"
+            class="mt-1 w-full rounded-md border border-border bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-border-dark"
           />
           <span class="mt-1 block text-xs text-ink-muted">
             {{ t('settings.modelHint', { default: defaultModelForProvider }) }}

@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
+import { useUiStore } from '@/stores/ui.store'
+import { i18n } from '@/i18n'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -46,7 +48,12 @@ export const router = createRouter({
   routes,
 })
 
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
+  const ui = useUiStore()
+  if (ui.isBusy && to.fullPath !== from.fullPath) {
+    ui.toast('info', i18n.global.t('generation.blockingNav'))
+    return false
+  }
   const auth = useAuthStore()
   await auth.hydrate()
   const isPublic = to.meta.public === true

@@ -145,7 +145,16 @@
   "generation": {
     "generating": "正在產生今日單字…",
     "regenerating": "重新產生中…",
-    "subtext": "正在向 LLM 詢問新字彙 — 已過 {seconds} 秒。"
+    "subtext": "正在向 LLM 詢問新字彙 — 已過 {seconds} 秒。",
+    "blockingNav": "生成進行中 — 請等待完成後再切換頁面。"
+  },
+  "languages": {
+    "de": "德文",
+    "en": "英文",
+    "fr": "法文",
+    "es": "西班牙文",
+    "ja": "日文",
+    "zh": "繁體中文"
   },
   "theme": {
     "light": "亮色",

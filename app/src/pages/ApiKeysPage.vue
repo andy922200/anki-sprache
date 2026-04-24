@@ -91,7 +91,7 @@ async function remove(p: LlmProvider) {
           v-model="input[p]"
           type="password"
           :placeholder="t('apiKeys.placeholder')"
-          class="flex-1 rounded-md border border-brand-100 bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-surface-dark-muted"
+          class="flex-1 rounded-md border border-border bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-border-dark"
         />
         <AppButton :disabled="busy === p || !input[p]" @click="save(p)">
           {{ current(p) ? t('apiKeys.replace') : t('apiKeys.save') }}

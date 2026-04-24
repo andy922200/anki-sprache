@@ -12,6 +12,8 @@ export interface Toast {
 interface UiState {
   themePref: ThemePref
   toasts: Toast[]
+  isBusy: boolean
+  busyLabel: string | null
 }
 
 // Module-scoped: monotonically increasing toast id; no need to be reactive.
@@ -21,6 +23,8 @@ export const useUiStore = defineStore('ui', {
   state: (): UiState => ({
     themePref: 'SYSTEM',
     toasts: [],
+    isBusy: false,
+    busyLabel: null,
   }),
   actions: {
     setTheme(t: ThemePref) {
@@ -35,6 +39,14 @@ export const useUiStore = defineStore('ui', {
     },
     dismiss(id: number) {
       this.toasts = this.toasts.filter((t) => t.id !== id)
+    },
+    beginBusy(label: string) {
+      this.isBusy = true
+      this.busyLabel = label
+    },
+    endBusy() {
+      this.isBusy = false
+      this.busyLabel = null
     },
   },
 })

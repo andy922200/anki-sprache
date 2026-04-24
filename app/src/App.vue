@@ -3,6 +3,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import { useTheme } from '@/composables/useTheme'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppToast from '@/components/common/AppToast.vue'
+import GlobalBusyOverlay from '@/components/common/GlobalBusyOverlay.vue'
 
 const auth = useAuthStore()
 useTheme()
@@ -21,6 +22,7 @@ void auth.hydrate()
       <RouterView />
     </main>
     <AppToast />
+    <GlobalBusyOverlay />
   </div>
 </template>
 

@@ -6,7 +6,6 @@ import { useI18n } from 'vue-i18n'
 import AppCard from '@/components/common/AppCard.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import LlmSetupCard from '@/components/common/LlmSetupCard.vue'
-import GenerationProgress from '@/components/common/GenerationProgress.vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { useSettingsStore } from '@/stores/settings.store'
 import { useUiStore } from '@/stores/ui.store'
@@ -69,6 +68,7 @@ async function onGenerate(force = false) {
     if (!ok) return
   }
   busy.value = true
+  ui.beginBusy(t(force ? 'generation.regenerating' : 'generation.generating'))
   try {
     const res = await generationApi.generateToday({ force })
     if (res.status === 'already-done') {
@@ -121,6 +121,7 @@ async function onGenerate(force = false) {
     }
   } finally {
     busy.value = false
+    ui.endBusy()
   }
 }
 
@@ -135,6 +136,7 @@ function onPractice() {
 
 async function onGenerateMore() {
   busy.value = true
+  ui.beginBusy(t('dashboard.generateMoreQueued'))
   try {
     await generationApi.generateMore(5)
     ui.toast('success', t('dashboard.generateMoreQueued'))
@@ -164,6 +166,7 @@ async function onGenerateMore() {
     }
   } finally {
     busy.value = false
+    ui.endBusy()
   }
 }
 </script>
@@ -188,9 +191,7 @@ async function onGenerateMore() {
       :preferred-provider="preferredProvider"
     />
 
-    <GenerationProgress v-if="busy" class="mb-6" />
-
-    <AppCard v-else-if="!status?.done" class="mb-6">
+    <AppCard v-if="!status?.done" class="mb-6">
       <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 class="text-lg font-semibold">

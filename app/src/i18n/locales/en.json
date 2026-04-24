@@ -145,7 +145,16 @@
   "generation": {
     "generating": "Generating today's words…",
     "regenerating": "Regenerating…",
-    "subtext": "Asking your LLM for fresh vocab — {seconds}s elapsed."
+    "subtext": "Asking your LLM for fresh vocab — {seconds}s elapsed.",
+    "blockingNav": "Generation in progress — please wait until it finishes."
+  },
+  "languages": {
+    "de": "German",
+    "en": "English",
+    "fr": "French",
+    "es": "Spanish",
+    "ja": "Japanese",
+    "zh": "Traditional Chinese"
   },
   "theme": {
     "light": "Light",
