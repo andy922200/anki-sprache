@@ -199,7 +199,9 @@ async function onGenerateMore() {
           </h2>
           <p class="text-sm text-ink-muted">{{ t('dashboard.generatePrompt') }}</p>
         </div>
-        <AppButton @click="onGenerate(false)">{{ t('dashboard.generateBtn') }}</AppButton>
+        <AppButton :disabled="!!setupMissing || busy" @click="onGenerate(false)">
+          {{ t('dashboard.generateBtn') }}
+        </AppButton>
       </div>
     </AppCard>
 
@@ -218,7 +220,12 @@ async function onGenerateMore() {
             }}
           </p>
         </div>
-        <AppButton variant="secondary" size="sm" @click="onGenerate(true)">
+        <AppButton
+          variant="secondary"
+          size="sm"
+          :disabled="!!setupMissing || busy"
+          @click="onGenerate(true)"
+        >
           {{ t('dashboard.regenerate') }}
         </AppButton>
       </div>
@@ -241,7 +248,7 @@ async function onGenerateMore() {
           <AppButton variant="secondary" :disabled="busy" @click="onPractice">
             {{ t('dashboard.practiceAgain') }}
           </AppButton>
-          <AppButton variant="ghost" :disabled="busy" @click="onGenerateMore">
+          <AppButton variant="ghost" :disabled="!!setupMissing || busy" @click="onGenerateMore">
             {{ busy ? t('common.loading') : t('dashboard.generateMore', { count: 5 }) }}
           </AppButton>
         </div>

@@ -107,18 +107,18 @@
     "saveFailed": "儲存設定失敗",
     "upgradeSection": "例句難度",
     "upgradeHint": "切換 CEFR 等級後，既有字卡仍沿用原本難度的例句。按下方按鈕可針對你正在學習中的字卡，用你自己的 LLM 金鑰重新生成符合目前等級的例句。",
-    "upgradeButton": "將例句升級到目前等級",
-    "upgradeQueued": "已排入升級工作 — 你可以繼續使用其他功能，完成後會通知你。",
-    "upgradeInProgress": "正在升級例句…",
-    "upgradeRunningExternally": "已有另一個分頁在執行升級。",
-    "upgradeSuccess": "例句已升級 — 重新打開字卡即可看到新例句。",
-    "upgradeSuccessSummary": "例句升級完成：成功 {upgraded} 張、跳過 {skipped} 張。",
-    "upgradePartialSummary": "例句升級完成：成功 {upgraded} 張、失敗 {failed} 張、跳過 {skipped} 張（最近錯誤：{error}）。",
-    "upgradeFailed": "升級失敗：{error}",
-    "upgradeTooSlow": "升級花費時間超過預期 — 請檢查 worker 日誌",
+    "upgradeButton": "將例句調整到目前等級",
+    "upgradeQueued": "已排入調整工作 — 你可以繼續使用其他功能，完成後會通知你。",
+    "upgradeInProgress": "正在調整例句…",
+    "upgradeRunningExternally": "已有另一個分頁在執行調整。",
+    "upgradeSuccess": "例句已調整 — 重新打開字卡即可看到新例句。",
+    "upgradeSuccessSummary": "例句調整完成：成功 {upgraded} 張、跳過 {skipped} 張。",
+    "upgradePartialSummary": "例句調整完成：成功 {upgraded} 張、失敗 {failed} 張、跳過 {skipped} 張（最近錯誤：{error}）。",
+    "upgradeFailed": "調整失敗：{error}",
+    "upgradeTooSlow": "調整花費時間超過預期 — 請檢查 worker 日誌",
     "upgradeDisabledNoProvider": "請先到偏好設定選擇 LLM 提供者並儲存。",
     "upgradeDisabledNoKey": "請先到 API 金鑰頁面新增 {provider} 金鑰。",
-    "upgradeDisabledUnsaved": "你有尚未儲存的設定變更 — 請先按「儲存」再進行升級。"
+    "upgradeDisabledUnsaved": "你有尚未儲存的設定變更 — 請先按「儲存」再進行調整。"
   },
   "apiKeys": {
     "title": "API 金鑰",
@@ -131,7 +131,14 @@
     "remove": "刪除",
     "providerSaved": "{provider} 金鑰已儲存",
     "providerRemoved": "{provider} 金鑰已刪除",
-    "saveFailed": "儲存金鑰失敗"
+    "saveFailed": "儲存金鑰失敗",
+    "currentPreferred": "目前偏好：{provider}",
+    "changePreferred": "更改",
+    "noProviderYet": "你還沒選擇偏好的 LLM 提供者 — 先到設定挑一個，每日單字與例句調整才能運作。",
+    "pickProviderLink": "前往設定選擇 →",
+    "showOthers": "管理其他提供者的金鑰",
+    "hideOthers": "收合",
+    "othersCount": "（{count} 已儲存）"
   },
   "llmSetup": {
     "title": "需要設定 LLM",
@@ -154,9 +161,10 @@
   "languages": {
     "de": "德文",
     "en": "英文",
-    "fr": "法文",
     "es": "西班牙文",
+    "fr": "法文",
     "ja": "日文",
+    "pt": "葡萄牙文",
     "zh": "繁體中文"
   },
   "theme": {

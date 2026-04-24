@@ -2,8 +2,8 @@ import type { LlmProvider, PrismaClient, VocabularyCard } from '@/generated/pris
 import type { Redis } from 'ioredis'
 import { buildDailyWordsPrompt, wordResponseSchema, type WordItem } from '@/shared/llm/prompts/dailyWords.js'
 import {
-  buildExampleUpgradePrompt,
-  exampleUpgradeResponseSchema,
+  buildCardAdjustmentPrompt,
+  cardAdjustmentResponseSchema,
 } from '@/shared/llm/prompts/exampleUpgrade.js'
 import { getAdapterForUser } from '@/shared/llm/llmClient.js'
 
@@ -665,11 +665,16 @@ export async function upgradeExamplesForUser(
             lemma: true,
             partOfSpeech: true,
             translations: {
-              where: { nativeLanguageCode: nativeCode },
-              select: { translation: true },
+              select: { translation: true, nativeLanguageCode: true },
             },
             examples: {
-              select: { text: true, cefrLevel: true, orderIndex: true },
+              select: {
+                id: true,
+                text: true,
+                cefrLevel: true,
+                orderIndex: true,
+                translations: { select: { nativeLanguageCode: true } },
+              },
               orderBy: { orderIndex: 'asc' },
             },
           },
@@ -690,57 +695,113 @@ export async function upgradeExamplesForUser(
 
     for (const s of states) {
       const card = s.card
-      const hasTargetLevel = card.examples.some((e) => e.cefrLevel === targetCefr)
-      if (hasTargetLevel) {
+
+      const hasCardTranslationInNative = card.translations.some(
+        (t) => t.nativeLanguageCode === nativeCode,
+      )
+      const hasExampleAtTargetCefr = card.examples.some((e) => e.cefrLevel === targetCefr)
+      const existingNeedTranslation = card.examples.filter(
+        (e) =>
+          e.cefrLevel !== targetCefr &&
+          !e.translations.some((t) => t.nativeLanguageCode === nativeCode),
+      )
+
+      const needCardTranslation = !hasCardTranslationInNative
+      const needNewExamples = !hasExampleAtTargetCefr
+
+      if (!needCardTranslation && !needNewExamples && existingNeedTranslation.length === 0) {
         skipped++
         continue
       }
 
-      // Use the first available example (any CEFR) as a meaning anchor for
-      // the LLM; if the card has no examples at all, skip reference.
-      const reference = card.examples[0]?.text ?? null
-      const translation = card.translations[0]?.translation ?? ''
-      if (!translation) {
-        failed.push({ cardId: card.id, reason: 'NO_TRANSLATION_IN_NATIVE' })
-        continue
-      }
+      // Meaning anchor: prefer the native-language translation if we have it,
+      // otherwise fall back to any other language's translation so the LLM has
+      // something to ground the word's meaning.
+      const meaningAnchor =
+        card.translations.find((t) => t.nativeLanguageCode === nativeCode)?.translation ??
+        card.translations[0]?.translation ??
+        null
 
-      const prompt = buildExampleUpgradePrompt({
+      const prompt = buildCardAdjustmentPrompt({
         targetLanguageName: settings.targetLanguage.name,
         nativeLanguageName: settings.nativeLanguage.name,
         cefr: targetCefr,
         lemma: card.lemma,
         partOfSpeech: card.partOfSpeech,
-        translation,
-        referenceSentence: reference,
-        count: UPGRADE_SENTENCES_PER_CARD,
+        meaningAnchor,
+        needCardTranslation,
+        needNewExamples: needNewExamples
+          ? {
+              count: UPGRADE_SENTENCES_PER_CARD,
+              referenceSentence: card.examples[0]?.text ?? null,
+            }
+          : null,
+        existingExamplesNeedingTranslation: existingNeedTranslation.map((e) => e.text),
       })
 
       const startedAt = Date.now()
       try {
         const res = await adapter.complete(prompt)
-        const parsed = exampleUpgradeResponseSchema.safeParse(extractJson(res.content))
+        const parsed = cardAdjustmentResponseSchema.safeParse(extractJson(res.content))
         if (!parsed.success) throw new Error('LLM returned invalid JSON shape')
-        const sentences = parsed.data.sentences.slice(0, UPGRADE_SENTENCES_PER_CARD)
+        const data = parsed.data
 
-        await prisma.$transaction(async (tx) => {
-          for (let idx = 0; idx < sentences.length; idx++) {
-            const sentence = sentences[idx]!
-            await tx.exampleSentence.create({
-              data: {
-                cardId: card.id,
-                text: sentence.text,
-                orderIndex: idx,
-                cefrLevel: targetCefr,
-                translations: {
-                  create: [
-                    { nativeLanguageCode: nativeCode, translation: sentence.translation },
-                  ],
+        // Index existing examples by exact text so we can match the LLM's
+        // echoed `text` back to the DB row.
+        const byText = new Map(existingNeedTranslation.map((e) => [e.text, e.id]))
+
+        const newExamples = needNewExamples
+          ? (data.newExamples ?? []).slice(0, UPGRADE_SENTENCES_PER_CARD)
+          : []
+        const cardTx = needCardTranslation ? data.cardTranslation : undefined
+        const existingTranslations = (data.existingExampleTranslations ?? []).filter((row) =>
+          byText.has(row.text),
+        )
+
+        const wroteSomething =
+          !!cardTx || newExamples.length > 0 || existingTranslations.length > 0
+
+        if (wroteSomething) {
+          await prisma.$transaction(async (tx) => {
+            if (cardTx) {
+              await tx.cardTranslation.upsert({
+                where: { cardId_nativeLanguageCode: { cardId: card.id, nativeLanguageCode: nativeCode } },
+                create: { cardId: card.id, nativeLanguageCode: nativeCode, translation: cardTx },
+                update: { translation: cardTx },
+              })
+            }
+            for (let idx = 0; idx < newExamples.length; idx++) {
+              const sentence = newExamples[idx]!
+              await tx.exampleSentence.create({
+                data: {
+                  cardId: card.id,
+                  text: sentence.text,
+                  orderIndex: idx,
+                  cefrLevel: targetCefr,
+                  translations: {
+                    create: [
+                      { nativeLanguageCode: nativeCode, translation: sentence.translation },
+                    ],
+                  },
                 },
-              },
-            })
-          }
-        })
+              })
+            }
+            for (const row of existingTranslations) {
+              const exId = byText.get(row.text)!
+              await tx.exampleSentenceTranslation.upsert({
+                where: {
+                  exampleId_nativeLanguageCode: { exampleId: exId, nativeLanguageCode: nativeCode },
+                },
+                create: {
+                  exampleId: exId,
+                  nativeLanguageCode: nativeCode,
+                  translation: row.translation,
+                },
+                update: { translation: row.translation },
+              })
+            }
+          })
+        }
 
         await prisma.llmUsageLog.create({
           data: {
@@ -754,7 +815,13 @@ export async function upgradeExamplesForUser(
             success: true,
           },
         })
-        upgradedCardIds.push(card.id)
+
+        if (wroteSomething) {
+          upgradedCardIds.push(card.id)
+        } else {
+          // LLM returned no usable fields even though gaps existed — count as failure.
+          failed.push({ cardId: card.id, reason: 'LLM returned no fillable fields' })
+        }
       } catch (err) {
         const reason = err instanceof Error ? err.message : 'unknown'
         await prisma.llmUsageLog.create({

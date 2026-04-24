@@ -107,18 +107,18 @@
     "saveFailed": "Failed to save settings",
     "upgradeSection": "Example sentences",
     "upgradeHint": "When you change CEFR level, existing cards keep their original example sentences. Click below to regenerate examples for cards you're currently learning at your new level, using your own LLM key.",
-    "upgradeButton": "Upgrade examples to current level",
-    "upgradeQueued": "Upgrade queued — feel free to keep using the app, we'll notify you when it's done.",
-    "upgradeInProgress": "Upgrading example sentences…",
-    "upgradeRunningExternally": "An upgrade is already running in another tab.",
-    "upgradeSuccess": "Examples upgraded — reload a card to see the new sentences.",
-    "upgradeSuccessSummary": "Example upgrade done: {upgraded} succeeded, {skipped} skipped.",
-    "upgradePartialSummary": "Example upgrade done: {upgraded} succeeded, {failed} failed, {skipped} skipped (last error: {error}).",
-    "upgradeFailed": "Upgrade failed: {error}",
-    "upgradeTooSlow": "Upgrade is taking longer than expected — check worker logs",
+    "upgradeButton": "Adjust examples to current level",
+    "upgradeQueued": "Adjustment queued — feel free to keep using the app, we'll notify you when it's done.",
+    "upgradeInProgress": "Adjusting example sentences…",
+    "upgradeRunningExternally": "An adjustment is already running in another tab.",
+    "upgradeSuccess": "Examples adjusted — reload a card to see the new sentences.",
+    "upgradeSuccessSummary": "Example adjustment done: {upgraded} succeeded, {skipped} skipped.",
+    "upgradePartialSummary": "Example adjustment done: {upgraded} succeeded, {failed} failed, {skipped} skipped (last error: {error}).",
+    "upgradeFailed": "Adjustment failed: {error}",
+    "upgradeTooSlow": "Adjustment is taking longer than expected — check worker logs",
     "upgradeDisabledNoProvider": "Pick a preferred LLM provider and save settings first.",
     "upgradeDisabledNoKey": "Add an API key for {provider} on the API keys page first.",
-    "upgradeDisabledUnsaved": "You have unsaved settings changes — save them before upgrading."
+    "upgradeDisabledUnsaved": "You have unsaved settings changes — save them before adjusting."
   },
   "apiKeys": {
     "title": "API keys",
@@ -131,7 +131,14 @@
     "remove": "Remove",
     "providerSaved": "{provider} key saved",
     "providerRemoved": "{provider} key removed",
-    "saveFailed": "Failed to save key"
+    "saveFailed": "Failed to save key",
+    "currentPreferred": "Current preferred: {provider}",
+    "changePreferred": "Change",
+    "noProviderYet": "You haven't picked a preferred LLM provider yet. Pick one in Settings before daily generation or example adjustments can run.",
+    "pickProviderLink": "Pick one in Settings →",
+    "showOthers": "Manage other providers' keys",
+    "hideOthers": "Hide",
+    "othersCount": "({count} saved)"
   },
   "llmSetup": {
     "title": "LLM setup required",
@@ -154,9 +161,10 @@
   "languages": {
     "de": "German",
     "en": "English",
-    "fr": "French",
     "es": "Spanish",
+    "fr": "French",
     "ja": "Japanese",
+    "pt": "Portuguese",
     "zh": "Traditional Chinese"
   },
   "theme": {

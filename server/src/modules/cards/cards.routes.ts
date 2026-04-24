@@ -156,10 +156,11 @@ export const cardsRoutes: FastifyPluginAsyncZod = async (app) => {
       const userId = req.user!.userId
       const userSettings = await app.prisma.userSettings.findUniqueOrThrow({
         where: { userId },
-        select: { cefrLevel: true, nativeLanguageCode: true },
+        select: { cefrLevel: true, nativeLanguageCode: true, targetLanguageCode: true },
       })
       const native = userSettings.nativeLanguageCode
-      const cacheKey = `cards:due:${userId}:${userSettings.cefrLevel}:${native}:${req.query.limit}`
+      const target = userSettings.targetLanguageCode
+      const cacheKey = `cards:due:${userId}:${target}:${userSettings.cefrLevel}:${native}:${req.query.limit}`
       const cached = await app.redis.get(cacheKey)
       if (cached) {
         reply.header('X-Cache', 'HIT')
@@ -168,7 +169,7 @@ export const cardsRoutes: FastifyPluginAsyncZod = async (app) => {
 
       const now = new Date()
       const states = await app.prisma.userCardState.findMany({
-        where: { userId, due: { lte: now } },
+        where: { userId, due: { lte: now }, card: { is: { languageCode: target } } },
         orderBy: [{ due: 'asc' }],
         take: req.query.limit,
         include: {

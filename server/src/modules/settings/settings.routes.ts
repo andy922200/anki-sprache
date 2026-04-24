@@ -43,21 +43,32 @@ export const settingsRoutes: FastifyPluginAsyncZod = async (app) => {
     '/',
     { schema: { body: patchSettingsSchema, response: { 200: settingsDto } } },
     async (req) => {
+      const userId = req.user!.userId
       if (req.body.targetLanguageCode) {
         const lang = await app.prisma.language.findUnique({
           where: { code: req.body.targetLanguageCode },
         })
         if (!lang || !lang.enabled) throw app.httpErrors.badRequest('Language not available')
       }
+      const prev = await app.prisma.userSettings.findUniqueOrThrow({ where: { userId } })
       // Normalize empty strings to null so adapter defaults apply.
       const data = { ...req.body }
       if (typeof data.preferredLlmModel === 'string' && data.preferredLlmModel.trim() === '') {
         data.preferredLlmModel = null
       }
       const s = await app.prisma.userSettings.update({
-        where: { userId: req.user!.userId },
+        where: { userId },
         data,
       })
+      // Invalidate per-user card caches when the language pair changes — both
+      // `/cards/due` keys and any other cards:* entries we've scoped by user.
+      const languagePairChanged =
+        (req.body.targetLanguageCode && req.body.targetLanguageCode !== prev.targetLanguageCode) ||
+        (req.body.nativeLanguageCode && req.body.nativeLanguageCode !== prev.nativeLanguageCode)
+      if (languagePairChanged) {
+        const keys = await app.redis.keys(`cards:due:${userId}:*`)
+        if (keys.length) await app.redis.del(...keys)
+      }
       return toDto(s)
     },
   )

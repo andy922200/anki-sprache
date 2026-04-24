@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import { useSettingsStore } from '@/stores/settings.store'
 import { useUiStore } from '@/stores/ui.store'
 import { useGenerationStore } from '@/stores/generation.store'
+import { useCardsStore } from '@/stores/cards.store'
 import * as usersApi from '@/api/users.api'
 import * as languagesApi from '@/api/languages.api'
 import * as generationApi from '@/api/generation.api'
@@ -26,6 +27,7 @@ const auth = useAuthStore()
 const settings = useSettingsStore()
 const ui = useUiStore()
 const generation = useGenerationStore()
+const cards = useCardsStore()
 const { t } = useI18n()
 
 const languages = ref<LanguageDto[]>([])
@@ -64,6 +66,29 @@ const preferredProvider = computed<LlmProvider | null>(
 )
 
 const upgradeInFlight = computed(() => generation.UPGRADE_IN_FLIGHT)
+
+function languageOptionLabel(l: LanguageDto): string {
+  const localized = t(`languages.${l.code}`)
+  return localized === l.nativeName ? localized : `${localized} - ${l.nativeName}`
+}
+
+// Filter target/native against each other so the two can't be set to the same
+// language. Always keep the current selection visible to handle legacy data
+// where they may have collided before this rule existed.
+const targetOptions = computed(() =>
+  languages.value.filter(
+    (x) =>
+      x.enabled &&
+      (x.code !== draft.value?.nativeLanguageCode || x.code === draft.value?.targetLanguageCode),
+  ),
+)
+const nativeOptions = computed(() =>
+  languages.value.filter(
+    (x) =>
+      x.enabled &&
+      (x.code !== draft.value?.targetLanguageCode || x.code === draft.value?.nativeLanguageCode),
+  ),
+)
 
 const hasUpgradeRelevantUnsaved = computed(() => {
   if (!draft.value || !settings.settings) return false
@@ -111,6 +136,8 @@ async function save() {
       }
     }
     if (draft.value) {
+      const prevTarget = settings.settings?.targetLanguageCode
+      const prevNative = settings.settings?.nativeLanguageCode
       await settings.update({
         targetLanguageCode: draft.value.targetLanguageCode,
         nativeLanguageCode: draft.value.nativeLanguageCode,
@@ -120,6 +147,13 @@ async function save() {
         preferredLlmModel: draft.value.preferredLlmModel || null,
         uiLanguage: draft.value.uiLanguage,
       })
+      const languagePairChanged =
+        draft.value.targetLanguageCode !== prevTarget ||
+        draft.value.nativeLanguageCode !== prevNative
+      if (languagePairChanged) {
+        cards.reset()
+        void generation.refresh()
+      }
     }
     ui.toast('success', t('settings.saved'))
   } catch {
@@ -216,8 +250,8 @@ async function onUpgradeExamples() {
             v-model="draft.targetLanguageCode"
             class="mt-1 w-full rounded-md border border-border bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-border-dark"
           >
-            <option v-for="l in languages.filter((x) => x.enabled)" :key="l.code" :value="l.code">
-              {{ t(`languages.${l.code}`) }} - ({{ l.name }})
+            <option v-for="l in targetOptions" :key="l.code" :value="l.code">
+              {{ languageOptionLabel(l) }}
             </option>
           </select>
         </label>
@@ -227,8 +261,8 @@ async function onUpgradeExamples() {
             v-model="draft.nativeLanguageCode"
             class="mt-1 w-full rounded-md border border-border bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-border-dark"
           >
-            <option v-for="l in languages" :key="l.code" :value="l.code">
-              {{ t(`languages.${l.code}`) }} - ({{ l.name }})
+            <option v-for="l in nativeOptions" :key="l.code" :value="l.code">
+              {{ languageOptionLabel(l) }}
             </option>
           </select>
         </label>

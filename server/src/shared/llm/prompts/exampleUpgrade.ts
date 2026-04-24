@@ -1,56 +1,107 @@
 import { z } from 'zod'
 
-export const exampleUpgradeResponseSchema = z.object({
-  sentences: z
+export const cardAdjustmentResponseSchema = z.object({
+  cardTranslation: z.string().min(1).max(300).optional(),
+  newExamples: z
     .array(
       z.object({
         text: z.string().min(1).max(300),
         translation: z.string().min(1).max(300),
       }),
     )
-    .min(1)
-    .max(3),
+    .max(3)
+    .optional(),
+  existingExampleTranslations: z
+    .array(
+      z.object({
+        text: z.string().min(1),
+        translation: z.string().min(1).max(300),
+      }),
+    )
+    .optional(),
 })
-export type ExampleUpgradeResponse = z.infer<typeof exampleUpgradeResponseSchema>
+export type CardAdjustmentResponse = z.infer<typeof cardAdjustmentResponseSchema>
 
-export function buildExampleUpgradePrompt(params: {
+export interface BuildCardAdjustmentPromptInput {
   targetLanguageName: string
   nativeLanguageName: string
   cefr: string
   lemma: string
   partOfSpeech: string | null
-  translation: string
-  referenceSentence: string | null
-  count: number
-}) {
-  const system = `You are a language tutor rewriting example sentences for a learner.
-Target language: ${params.targetLanguageName}. Native language (for translations): ${params.nativeLanguageName}.
-Rewrite example sentences for the given word so the difficulty matches CEFR ${params.cefr}.`
-
-  const pos = params.partOfSpeech ? ` (${params.partOfSpeech.toLowerCase()})` : ''
-  const reference = params.referenceSentence
-    ? `Reference sentence at a different level (for meaning, NOT style): "${params.referenceSentence}"`
-    : 'No reference sentence; infer meaning from the lemma + translation.'
-
-  const user = `Word: "${params.lemma}"${pos}
-Meaning (${params.nativeLanguageName}): "${params.translation}"
-${reference}
-
-Produce exactly ${params.count} fresh example sentences in ${params.targetLanguageName} whose vocabulary and grammar fit CEFR ${params.cefr}.
-
-Return a JSON object with shape:
-{
-  "sentences": [
-    { "text": "example sentence in ${params.targetLanguageName}", "translation": "in ${params.nativeLanguageName}" }
-  ]
+  /** A meaning anchor in any available native language; helps when we have to ask the LLM to translate. */
+  meaningAnchor: string | null
+  needCardTranslation: boolean
+  needNewExamples: { count: number; referenceSentence: string | null } | null
+  existingExamplesNeedingTranslation: string[]
 }
 
-Rules:
-- Each sentence must use the word "${params.lemma}" naturally.
-- Keep each sentence under 20 words.
-- Difficulty must match CEFR ${params.cefr} — vocabulary, tense, and clause structure typical for that level.
-- Do NOT reuse the reference sentence verbatim.
-- Return ONLY the JSON object, no prose, no code fences.`
+/**
+ * Builds a prompt that asks the LLM to fill specific gaps for a card:
+ *   - the word's translation in the user's current native language
+ *   - new example sentences at the user's current CEFR level
+ *   - translations for already-existing example sentences in the new native
+ *
+ * The prompt only requests the fields that the caller marks as missing, so
+ * fully-covered cards never reach this builder.
+ */
+export function buildCardAdjustmentPrompt(input: BuildCardAdjustmentPromptInput) {
+  const requested: string[] = []
+  if (input.needCardTranslation) requested.push('cardTranslation')
+  if (input.needNewExamples) requested.push('newExamples')
+  if (input.existingExamplesNeedingTranslation.length > 0) requested.push('existingExampleTranslations')
 
-  return { system, user }
+  const pos = input.partOfSpeech ? ` (${input.partOfSpeech.toLowerCase()})` : ''
+  const meaningLine = input.meaningAnchor
+    ? `Meaning anchor (in another language, for context only): "${input.meaningAnchor}"`
+    : 'No prior translation available; infer the meaning from the word alone.'
+
+  const system = `You are a language tutor filling in missing translation/example data for a vocabulary card.
+Target language: ${input.targetLanguageName}.
+Native language (for translations): ${input.nativeLanguageName}.
+You will be told which JSON fields to return; return ONLY those fields.`
+
+  const sections: string[] = [
+    `Word: "${input.lemma}"${pos}`,
+    meaningLine,
+    `CEFR level: ${input.cefr}`,
+    '',
+    `Return a JSON object containing ONLY these keys: ${requested.join(', ')}. Omit any key not listed.`,
+  ]
+
+  if (input.needCardTranslation) {
+    sections.push(
+      '',
+      `- "cardTranslation" (string): the word's natural meaning in ${input.nativeLanguageName}, ` +
+        'concise (typically 1-5 words). Match part-of-speech where possible.',
+    )
+  }
+
+  if (input.needNewExamples) {
+    const ref = input.needNewExamples.referenceSentence
+      ? `\n  Reference sentence at a different level (for meaning, NOT style): "${input.needNewExamples.referenceSentence}"`
+      : ''
+    sections.push(
+      '',
+      `- "newExamples" (array of ${input.needNewExamples.count}): each item ` +
+        `{ "text": <example sentence in ${input.targetLanguageName}>, "translation": <translation in ${input.nativeLanguageName}> }. ` +
+        `Vocabulary, tense, and clause structure must match CEFR ${input.cefr}. Each sentence under 20 words. Use "${input.lemma}" naturally.${ref}`,
+    )
+  }
+
+  if (input.existingExamplesNeedingTranslation.length > 0) {
+    const list = input.existingExamplesNeedingTranslation
+      .map((t, i) => `  ${i + 1}. "${t}"`)
+      .join('\n')
+    sections.push(
+      '',
+      `- "existingExampleTranslations" (array): provide a ${input.nativeLanguageName} translation ` +
+        'for each of these existing sentences. Each item must be { "text": <exact original>, "translation": <translation> }. ' +
+        'Echo the "text" verbatim so we can match it back. Sentences:',
+      list,
+    )
+  }
+
+  sections.push('', 'Return ONLY the JSON object — no prose, no markdown, no code fences.')
+
+  return { system, user: sections.join('\n') }
 }

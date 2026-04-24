@@ -7,10 +7,11 @@ const prisma = new PrismaClient({ adapter })
 const LANGUAGES = [
   { code: 'de', name: 'German', nativeName: 'Deutsch', enabled: true },
   { code: 'en', name: 'English', nativeName: 'English', enabled: true },
+  { code: 'ja', name: 'Japanese', nativeName: '日本語', enabled: true },
+  { code: 'pt', name: 'Portuguese', nativeName: 'Português', enabled: true },
+  { code: 'zh', name: 'Chinese (Traditional)', nativeName: '繁體中文', enabled: true },
   { code: 'fr', name: 'French', nativeName: 'Français', enabled: false },
   { code: 'es', name: 'Spanish', nativeName: 'Español', enabled: false },
-  { code: 'ja', name: 'Japanese', nativeName: '日本語', enabled: false },
-  { code: 'zh', name: 'Chinese (Traditional)', nativeName: '繁體中文', enabled: false },
 ]
 
 async function main() {
