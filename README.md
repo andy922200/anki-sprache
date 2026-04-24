@@ -200,6 +200,29 @@ pnpm --filter ./server test:watch      # 後端 watch
 
 ---
 
+## 🔊 TTS 音檔對照查詢
+
+R2 bucket 內的音檔採 content-addressed 命名（`audio/{kind}/{lang}/{sha256}.mp3`），hash 沒辦法直接認人。想知道某個 key 對應到哪個單字或例句，用 `pnpm db:studio` 打開 Prisma Studio 的 SQL 分頁跑：
+
+```sql
+-- 所有單字音檔對照
+SELECT lemma, "languageCode", "audioUrl"
+FROM "VocabularyCard"
+WHERE "audioUrl" IS NOT NULL
+ORDER BY "languageCode", lemma;
+
+-- 所有例句音檔對照（含所屬單字）
+SELECT c.lemma, c."languageCode", e.text, e."audioUrl"
+FROM "ExampleSentence" e
+JOIN "VocabularyCard" c ON c.id = e."cardId"
+WHERE e."audioUrl" IS NOT NULL
+ORDER BY c."languageCode", c.lemma, e."orderIndex";
+```
+
+> 每個 R2 物件也會夾帶 `text` / `lang` / `kind` 三個 metadata 欄位（`text` 為 URL-encoded 以相容非 ASCII），在 Cloudflare R2 dashboard 點開物件即可看到。
+
+---
+
 ## 📚 更多文件
 
 - [`AGENTS.md`](./AGENTS.md) — 完整的工程規範、命名慣例、安全實作、頁面權限、部署細節、AI 協作守則

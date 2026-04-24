@@ -1,6 +1,13 @@
 import type { Redis } from 'ioredis'
 import type { CEFR, PrismaClient } from '@/generated/prisma/client.js'
-import { buildAudioKey, deleteAudio, extractKeyFromUrl, uploadAudio } from '@/shared/storage/r2.js'
+import {
+  buildAudioKey,
+  deleteAudio,
+  extractKeyFromUrl,
+  objectExists,
+  publicUrlFor,
+  uploadAudio,
+} from '@/shared/storage/r2.js'
 import { buildTtsAdapter } from '@/shared/tts/ttsClient.js'
 
 export const EXAMPLES_PER_LEVEL_MAX = 3
@@ -100,14 +107,31 @@ export async function ensureAudio(
     const fresh = await loadTarget(prisma, kind, id)
     if (fresh?.audioUrl) return fresh.audioUrl
 
+    // Content-addressed key: identical (kind, languageCode, text) always
+    // maps to the same R2 object. If an object already exists (e.g.
+    // synthesised in another environment sharing this bucket), skip the
+    // TTS call entirely and just persist the URL.
+    const key = buildAudioKey(kind, target.languageCode, target.text)
+    if (await objectExists(key)) {
+      const existingUrl = publicUrlFor(key)
+      await persistAudioUrl(prisma, kind, id, existingUrl)
+      return existingUrl
+    }
+
     const adapter = buildTtsAdapter('GOOGLE')
     const buffer = await adapter.synthesize({
       text: target.text,
       languageCode: target.languageCode,
     })
 
-    const key = buildAudioKey(kind, id, target.text)
-    const url = await uploadAudio(key, buffer)
+    const url = await uploadAudio(key, buffer, {
+      // URL-encode so non-ASCII (中文 / 日文 / ß) survives S3's ASCII-only
+      // metadata header transport. Decode with decodeURIComponent() when
+      // reading back via HEAD or dashboard inspection tooling.
+      text: encodeURIComponent(target.text),
+      lang: target.languageCode,
+      kind,
+    })
     await persistAudioUrl(prisma, kind, id, url)
     return url
   } finally {
@@ -149,6 +173,14 @@ export async function pruneExamples(
     if (!row.audioUrl) continue
     const key = extractKeyFromUrl(row.audioUrl)
     if (!key) continue
+    // Content-addressed keys mean two different records can share the
+    // same R2 object. Only delete when we're the last reference so we
+    // don't turn another record's audioUrl into a dead link.
+    const [cardRefs, exampleRefs] = await Promise.all([
+      prisma.vocabularyCard.count({ where: { audioUrl: row.audioUrl } }),
+      prisma.exampleSentence.count({ where: { audioUrl: row.audioUrl } }),
+    ])
+    if (cardRefs > 0 || exampleRefs > 0) continue
     try {
       await deleteAudio(key)
     } catch {

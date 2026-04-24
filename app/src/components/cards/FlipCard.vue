@@ -50,6 +50,7 @@ defineExpose({
             <h2 class="text-4xl font-semibold">{{ card.lemma }}</h2>
             <AudioButton
               ref="lemmaAudioRef"
+              :key="card.id"
               size="md"
               :initial-url="card.audioUrl"
               :fetcher="() => fetchLemmaAudio(card.id)"
