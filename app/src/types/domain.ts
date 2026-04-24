@@ -94,4 +94,6 @@ export interface GenerationStatusDto {
   cardIds: string[]
   provider: LlmProvider | null
   lastError: string | null
+  upgradeInFlight: boolean
+  lastUpgradeError: string | null
 }

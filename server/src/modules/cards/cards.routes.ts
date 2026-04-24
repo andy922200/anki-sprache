@@ -95,30 +95,52 @@ export const cardsRoutes: FastifyPluginAsyncZod = async (app) => {
         },
       })
 
-      return states.map((s) => ({
-        id: s.card.id,
-        languageCode: s.card.languageCode,
-        lemma: s.card.lemma,
-        surfaceForm: s.card.surfaceForm,
-        partOfSpeech: s.card.partOfSpeech,
-        gender: s.card.gender,
-        ipa: s.card.ipa,
-        translation: s.card.translations[0]?.translation ?? '',
-        cefrLevel: s.card.cefrLevel,
-        examples: s.card.examples.map((e) => ({
-          id: e.id,
-          text: e.text,
-          translation: e.translations[0]?.translation ?? '',
-          audioUrl: e.audioUrl,
-          orderIndex: e.orderIndex,
-        })),
-        state: {
-          due: s.due.toISOString(),
-          state: s.state,
-          reps: s.reps,
-          lapses: s.lapses,
-        },
-      }))
+      // Fallback: if a card has no examples at the user's current CEFR level
+      // (e.g. they changed level after learning it), load any examples so the
+      // learner isn't shown a blank card while waiting for an upgrade job.
+      const cardsMissingExamples = states
+        .filter((s) => s.card.examples.length === 0)
+        .map((s) => s.card.id)
+      const fallbackExamples: Record<string, typeof states[number]['card']['examples']> = {}
+      if (cardsMissingExamples.length) {
+        const rows = await app.prisma.exampleSentence.findMany({
+          where: { cardId: { in: cardsMissingExamples } },
+          orderBy: { orderIndex: 'asc' },
+          include: { translations: { where: { nativeLanguageCode: native } } },
+        })
+        for (const r of rows) {
+          fallbackExamples[r.cardId] ??= []
+          fallbackExamples[r.cardId]!.push(r)
+        }
+      }
+
+      return states.map((s) => {
+        const exs = s.card.examples.length > 0 ? s.card.examples : fallbackExamples[s.card.id] ?? []
+        return {
+          id: s.card.id,
+          languageCode: s.card.languageCode,
+          lemma: s.card.lemma,
+          surfaceForm: s.card.surfaceForm,
+          partOfSpeech: s.card.partOfSpeech,
+          gender: s.card.gender,
+          ipa: s.card.ipa,
+          translation: s.card.translations[0]?.translation ?? '',
+          cefrLevel: s.card.cefrLevel,
+          examples: exs.map((e) => ({
+            id: e.id,
+            text: e.text,
+            translation: e.translations[0]?.translation ?? '',
+            audioUrl: e.audioUrl,
+            orderIndex: e.orderIndex,
+          })),
+          state: {
+            due: s.due.toISOString(),
+            state: s.state,
+            reps: s.reps,
+            lapses: s.lapses,
+          },
+        }
+      })
     },
   )
 

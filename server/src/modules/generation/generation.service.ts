@@ -1,6 +1,10 @@
 import type { LlmProvider, PrismaClient, VocabularyCard } from '@/generated/prisma/client.js'
 import type { Redis } from 'ioredis'
 import { buildDailyWordsPrompt, wordResponseSchema, type WordItem } from '@/shared/llm/prompts/dailyWords.js'
+import {
+  buildExampleUpgradePrompt,
+  exampleUpgradeResponseSchema,
+} from '@/shared/llm/prompts/exampleUpgrade.js'
 import { getAdapterForUser } from '@/shared/llm/llmClient.js'
 
 export interface GenerateForUserInput {
@@ -580,6 +584,191 @@ export async function generateAdditionalForUser(
       createdNew: needed,
       reusedExisting: addedCardIds.length - needed,
       provider: usedProvider,
+    }
+  } finally {
+    await redis.del(lockKey)
+  }
+}
+
+export interface UpgradeExamplesInput {
+  userId: string
+}
+
+export interface UpgradeExamplesResult {
+  upgradedCardIds: string[]
+  skipped: number
+  failed: { cardId: string; reason: string }[]
+  provider: LlmProvider | null
+}
+
+const UPGRADE_LOCK_TTL_SECONDS = 600
+const UPGRADE_SENTENCES_PER_CARD = 2
+
+/**
+ * Regenerate example sentences for every `UserCardState` card that lacks
+ * examples at the user's current CEFR level. Existing examples at other
+ * levels are left untouched so downgrades remain reversible.
+ */
+export async function upgradeExamplesForUser(
+  prisma: PrismaClient,
+  redis: Redis,
+  input: UpgradeExamplesInput,
+): Promise<UpgradeExamplesResult> {
+  const { userId } = input
+
+  const settings = await prisma.userSettings.findUnique({
+    where: { userId },
+    include: { targetLanguage: true, nativeLanguage: true },
+  })
+  if (!settings) throw new Error('User settings not found')
+  if (!settings.preferredLlmProvider) {
+    throw new Error('LLM_PROVIDER_NOT_SET')
+  }
+  const key = await prisma.llmApiKey.findUnique({
+    where: { userId_provider: { userId, provider: settings.preferredLlmProvider } },
+  })
+  if (!key) {
+    throw new Error(`LLM_API_KEY_MISSING:${settings.preferredLlmProvider}`)
+  }
+
+  const lockKey = `lock:upgrade-examples:${userId}`
+  const acquired = await redis.set(lockKey, '1', 'EX', UPGRADE_LOCK_TTL_SECONDS, 'NX')
+  if (!acquired) throw new Error('UPGRADE_IN_PROGRESS')
+
+  try {
+    const targetCefr = settings.cefrLevel
+    const nativeCode = settings.nativeLanguageCode
+
+    const states = await prisma.userCardState.findMany({
+      where: {
+        userId,
+        card: { languageCode: settings.targetLanguageCode },
+      },
+      select: {
+        cardId: true,
+        card: {
+          select: {
+            id: true,
+            lemma: true,
+            partOfSpeech: true,
+            translations: {
+              where: { nativeLanguageCode: nativeCode },
+              select: { translation: true },
+            },
+            examples: {
+              select: { text: true, cefrLevel: true, orderIndex: true },
+              orderBy: { orderIndex: 'asc' },
+            },
+          },
+        },
+      },
+    })
+
+    const adapter = await getAdapterForUser(
+      prisma,
+      userId,
+      settings.preferredLlmProvider,
+      settings.preferredLlmModel,
+    )
+
+    const upgradedCardIds: string[] = []
+    const failed: { cardId: string; reason: string }[] = []
+    let skipped = 0
+
+    for (const s of states) {
+      const card = s.card
+      const hasTargetLevel = card.examples.some((e) => e.cefrLevel === targetCefr)
+      if (hasTargetLevel) {
+        skipped++
+        continue
+      }
+
+      // Use the first available example (any CEFR) as a meaning anchor for
+      // the LLM; if the card has no examples at all, skip reference.
+      const reference = card.examples[0]?.text ?? null
+      const translation = card.translations[0]?.translation ?? ''
+      if (!translation) {
+        failed.push({ cardId: card.id, reason: 'NO_TRANSLATION_IN_NATIVE' })
+        continue
+      }
+
+      const prompt = buildExampleUpgradePrompt({
+        targetLanguageName: settings.targetLanguage.name,
+        nativeLanguageName: settings.nativeLanguage.name,
+        cefr: targetCefr,
+        lemma: card.lemma,
+        partOfSpeech: card.partOfSpeech,
+        translation,
+        referenceSentence: reference,
+        count: UPGRADE_SENTENCES_PER_CARD,
+      })
+
+      const startedAt = Date.now()
+      try {
+        const res = await adapter.complete(prompt)
+        const parsed = exampleUpgradeResponseSchema.safeParse(extractJson(res.content))
+        if (!parsed.success) throw new Error('LLM returned invalid JSON shape')
+        const sentences = parsed.data.sentences.slice(0, UPGRADE_SENTENCES_PER_CARD)
+
+        await prisma.$transaction(async (tx) => {
+          for (let idx = 0; idx < sentences.length; idx++) {
+            const sentence = sentences[idx]!
+            await tx.exampleSentence.create({
+              data: {
+                cardId: card.id,
+                text: sentence.text,
+                orderIndex: idx,
+                cefrLevel: targetCefr,
+                translations: {
+                  create: [
+                    { nativeLanguageCode: nativeCode, translation: sentence.translation },
+                  ],
+                },
+              },
+            })
+          }
+        })
+
+        await prisma.llmUsageLog.create({
+          data: {
+            userId,
+            provider: adapter.provider,
+            model: adapter.model,
+            purpose: 'EXAMPLE_REGEN',
+            promptTokens: res.promptTokens,
+            completionTokens: res.completionTokens,
+            latencyMs: Date.now() - startedAt,
+            success: true,
+          },
+        })
+        upgradedCardIds.push(card.id)
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : 'unknown'
+        await prisma.llmUsageLog.create({
+          data: {
+            userId,
+            provider: adapter.provider,
+            model: adapter.model,
+            purpose: 'EXAMPLE_REGEN',
+            latencyMs: Date.now() - startedAt,
+            success: false,
+            errorCode: reason,
+          },
+        })
+        failed.push({ cardId: card.id, reason })
+      }
+    }
+
+    if (upgradedCardIds.length) {
+      const cacheKeys = await redis.keys(`cards:due:${userId}:*`)
+      if (cacheKeys.length) await redis.del(...cacheKeys)
+    }
+
+    return {
+      upgradedCardIds,
+      skipped,
+      failed,
+      provider: adapter.provider,
     }
   } finally {
     await redis.del(lockKey)

@@ -104,7 +104,18 @@
     "apiKeysLink": "API keys",
     "modelDocsHint": "Model names change often — check each provider's docs for current IDs.",
     "saved": "Settings saved",
-    "saveFailed": "Failed to save settings"
+    "saveFailed": "Failed to save settings",
+    "upgradeSection": "Example sentences",
+    "upgradeHint": "When you change CEFR level, existing cards keep their original example sentences. Click below to regenerate examples for cards you're currently learning at your new level, using your own LLM key.",
+    "upgradeButton": "Upgrade examples to current level",
+    "upgradeQueued": "Upgrade queued…",
+    "upgradeInProgress": "Upgrading example sentences…",
+    "upgradeRunningExternally": "An upgrade is already running in another tab.",
+    "upgradeSuccess": "Examples upgraded — reload a card to see the new sentences.",
+    "upgradeFailed": "Upgrade failed: {error}",
+    "upgradeTooSlow": "Upgrade is taking longer than expected — check worker logs",
+    "upgradeDisabledNoProvider": "Pick a preferred LLM provider and save settings first.",
+    "upgradeDisabledNoKey": "Add an API key for {provider} on the API keys page first."
   },
   "apiKeys": {
     "title": "API keys",

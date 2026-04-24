@@ -8,13 +8,14 @@ import { QUEUE_NAMES } from './shared/plugins/bullmq.plugin.js'
 import {
   generateForUser,
   generateAdditionalForUser,
+  upgradeExamplesForUser,
   type GenerateForUserInput,
 } from './modules/generation/generation.service.js'
 
 interface GenerationJobData {
   userId: string
   generationDate: string
-  mode?: 'DAILY' | 'ADDITIONAL'
+  mode?: 'DAILY' | 'ADDITIONAL' | 'UPGRADE_EXAMPLES'
   count?: number
 }
 
@@ -47,6 +48,25 @@ async function main() {
           count: job.data.count ?? 5,
         })
         log.info({ jobId: job.id, ...result }, 'generateAdditionalForUser: done')
+        return result
+      }
+      if (job.data.mode === 'UPGRADE_EXAMPLES') {
+        log.info(
+          { jobId: job.id, userId: job.data.userId },
+          'upgradeExamplesForUser: start',
+        )
+        const result = await upgradeExamplesForUser(prisma, redis, {
+          userId: job.data.userId,
+        })
+        log.info(
+          {
+            jobId: job.id,
+            upgraded: result.upgradedCardIds.length,
+            skipped: result.skipped,
+            failed: result.failed.length,
+          },
+          'upgradeExamplesForUser: done',
+        )
         return result
       }
       const input: GenerateForUserInput = {

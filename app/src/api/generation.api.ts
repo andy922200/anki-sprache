@@ -26,3 +26,10 @@ export async function generateMore(count = 5): Promise<{ jobId: string; status: 
   const axios = useAxios()
   return (await axios.post('/generate/more', { count })).data
 }
+
+export async function upgradeExamples(): Promise<
+  { jobId: string; status: 'queued' } | { jobId: null; status: 'already-running' }
+> {
+  const axios = useAxios()
+  return (await axios.post('/generate/examples/upgrade', {})).data
+}

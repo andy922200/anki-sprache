@@ -104,7 +104,18 @@
     "apiKeysLink": "API 金鑰",
     "modelDocsHint": "模型名稱常有更動 — 請查閱各提供者官方文件取得最新 ID。",
     "saved": "設定已儲存",
-    "saveFailed": "儲存設定失敗"
+    "saveFailed": "儲存設定失敗",
+    "upgradeSection": "例句難度",
+    "upgradeHint": "切換 CEFR 等級後，既有字卡仍沿用原本難度的例句。按下方按鈕可針對你正在學習中的字卡，用你自己的 LLM 金鑰重新生成符合目前等級的例句。",
+    "upgradeButton": "將例句升級到目前等級",
+    "upgradeQueued": "已排入升級工作…",
+    "upgradeInProgress": "正在升級例句…",
+    "upgradeRunningExternally": "已有另一個分頁在執行升級。",
+    "upgradeSuccess": "例句已升級 — 重新打開字卡即可看到新例句。",
+    "upgradeFailed": "升級失敗：{error}",
+    "upgradeTooSlow": "升級花費時間超過預期 — 請檢查 worker 日誌",
+    "upgradeDisabledNoProvider": "請先到偏好設定選擇 LLM 提供者並儲存。",
+    "upgradeDisabledNoKey": "請先到 API 金鑰頁面新增 {provider} 金鑰。"
   },
   "apiKeys": {
     "title": "API 金鑰",
