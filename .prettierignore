@@ -1,0 +1,14 @@
+# 後端走 Biome 維護，避免 Prettier 跟 Biome 互踩
+server/
+
+# 產物與生成物
+**/dist/
+**/node_modules/
+**/coverage/
+app/src/**/__generated__/
+
+# 鎖檔、快照、migration、環境檔
+pnpm-lock.yaml
+**/*.snap
+**/.env
+**/.env.*

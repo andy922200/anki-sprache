@@ -26,6 +26,7 @@
 | 後端 | Fastify 5.8（ESM）· Prisma 7（Rust-free + driver adapter）· PostgreSQL 16 · Redis 7 · BullMQ · ts-fsrs 5 · Zod 4 · Pino 10 |
 | LLM | `@anthropic-ai/sdk` · `openai` · `@google/generative-ai`（已 deprecated，將遷移至 `@google/genai`） |
 | 安全 | `@fastify/helmet` · `@fastify/cors` · `@fastify/rate-limit` · AES-256-GCM |
+| 風格 / Lint | ESLint 10 + Prettier 3.8（前端） · Biome 2（後端，lint+format 一站式） |
 | 測試 | Vitest 4 · happy-dom 20（前端） |
 | 部署 | Zeabur（Docker-based） |
 
@@ -113,6 +114,9 @@ pnpm dev:worker    # BullMQ worker（正式環境務必獨立程序）
 | `pnpm dev` | 同時啟動 app + server |
 | `pnpm build` | 前後端 production build |
 | `pnpm typecheck` | 兩個 workspace 都跑 `tsc --noEmit` |
+| `pnpm lint` | 兩個 workspace 跑 lint（前端 ESLint、後端 Biome） |
+| `pnpm format` | 兩個 workspace 寫入格式化（前端 Prettier、後端 Biome） |
+| `pnpm format:check` | dry-run 格式檢查，CI 友善 |
 | `pnpm test` | 兩個 workspace 跑 `vitest run` |
 | `pnpm db:migrate` | 套用 / 建立 Prisma migration |
 | `pnpm db:seed` | 匯入種子資料 |

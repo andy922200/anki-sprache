@@ -41,6 +41,7 @@
 | Backend | Fastify 5.8、Prisma 7（Rust-free + driver adapter）、PostgreSQL 16、Redis 7、BullMQ 5、ts-fsrs 5.3、Zod 4、Pino 10、jsonwebtoken 9 |
 | LLM SDKs | `@anthropic-ai/sdk` 0.90、`openai` 6、`@google/generative-ai` 0.24（deprecated，待遷移至 `@google/genai`）、`google-auth-library` 10 |
 | 安全 | `@fastify/helmet`、`@fastify/cors` 11、`@fastify/rate-limit`、`@fastify/cookie`、AES-256-GCM |
+| 風格 / Lint | ESLint 10 + Prettier 3.8（前端）、Biome 2（後端）、EditorConfig |
 | 測試 | Vitest 4、happy-dom 20（前端）|
 | 容器 | Docker Compose（dev：postgres + redis） |
 
@@ -129,7 +130,10 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 |  | `pnpm dev:worker` | BullMQ worker（獨立程序，正式環境務必拆開） |
 | 建置 | `pnpm build` | 兩個 workspace 皆 build（前端 `vue-tsc --noEmit && vite build`；後端 `tsc -p tsconfig.build.json`） |
 | 型別檢查 | `pnpm typecheck` | 全 workspace 跑 `tsc --noEmit` / `vue-tsc --noEmit` |
-| 程式碼檢查 | `pnpm lint` | 目前為 pass-through（尚未導入 ESLint，詳見 C 節） |
+| 程式碼檢查 | `pnpm lint` | 全 workspace 跑 lint（前端 ESLint、後端 Biome），詳見 C 節 |
+|  | `pnpm --filter ./app lint:fix` / `pnpm --filter ./server lint:fix` | 自動修復可 safe-fix 的規則（不會套用 unsafe fix） |
+| 程式碼格式 | `pnpm format` | 全 workspace 寫入格式化（前端 Prettier、後端 Biome） |
+|  | `pnpm format:check` | dry-run，CI 友善；通過代表所有檔案已符合格式 |
 | 測試 | `pnpm test` | 全 workspace 跑 `vitest run` |
 |  | `pnpm --filter ./server test:watch` | 後端 watch 模式 |
 | 資料庫 | `pnpm db:migrate` | `prisma migrate dev`（含 generate + 套用） |
@@ -151,17 +155,39 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 ## C. 程式碼風格規範 (Code Style Guidelines)
 
-### 格式工具
+### 程式碼風格與 Lint
 
-- **Prettier 3.8**（根 `.prettierrc`）：
-  - `semi: false`
-  - `singleQuote: true`
-  - `trailingComma: 'all'`
-  - `printWidth: 100`
-  - `arrowParens: 'always'`
-  - `endOfLine: 'lf'`
-- **EditorConfig**（根 `.editorconfig`）：UTF-8、LF、2 空格縮排、保留最後換行、去除行尾空白（`.md` 除外）。
-- **ESLint**：目前**未設定**。短期以 Prettier + `tsc --noEmit` 為守門；若新增請於根層導入 flat config，同時為兩個 workspace 提供規則。
+兩個 workspace 採不同 lint / formatter 工具，避免互踩；皆走「務實」路線，以 recommended 為基底、僅關閉與專案 idiom 不合的規則：
+
+| Workspace | Linter | Formatter | 設定檔 |
+|---|---|---|---|
+| `app/`（Vue 3 + TS） | ESLint 10（flat config） | Prettier 3.8 | `app/eslint.config.mjs`、根 `.prettierrc` |
+| `server/`（Fastify + TS） | Biome 2 | Biome 2（一站式） | `server/biome.json` |
+
+**前端 ESLint**（`app/eslint.config.mjs`）：
+
+- 主要 plugin：`eslint-plugin-vue`（`flat/recommended`）+ `@vue/eslint-config-typescript`（`vueTsConfigs.recommended`，整合 `typescript-eslint`）+ `eslint-config-prettier/flat`（關閉與 Prettier 衝突的 stylistic 規則）
+- 不開 typescript-eslint 的 type-checked 規則（成本高、`vue-tsc --noEmit` 已把關）
+- 自訂例外：
+  - `vue/multi-word-component-names: 'off'`（router 內單字元件名常見）
+  - `@typescript-eslint/no-unused-vars`：允許 `_` 前綴（`argsIgnorePattern` / `varsIgnorePattern` / `caughtErrorsIgnorePattern: '^_'`）
+- ignores：`dist/`、`coverage/`、`public/`、`node_modules/`
+
+**後端 Biome**（`server/biome.json`）：
+
+- `linter.rules.recommended: true`，僅關閉 `style.noNonNullAssertion`（Fastify `auth.plugin.ts` 註冊 `authenticate` 後 `req.user!.userId` 是專案 idiom，TS 無法跨 hook 推導）
+- formatter 設定**鏡射**根 `.prettierrc`：`quoteStyle: single`、`semicolons: asNeeded`、`trailingCommas: all`、`arrowParentheses: always`、`indentWidth: 2`、`lineWidth: 100`、`lineEnding: lf`
+- `files.includes`：`src/**/*.ts`、`prisma/**/*.ts`，並排除 `src/generated`、`dist`、`node_modules`、`prisma/migrations`
+- 注意：Biome 的折行 heuristic 與 Prettier 在邊界長度的處理略有差異，少數陳述式格式可能會被 Biome 重排，這是預期行為
+
+**Prettier**（`.prettierrc`，僅作用於 `app/`）：
+
+- `semi: false`、`singleQuote: true`、`trailingComma: 'all'`、`printWidth: 100`、`arrowParens: 'always'`、`endOfLine: 'lf'`
+- 根 `.prettierignore` 排除 `server/`、產物、lock file、`.env`，避免 Prettier 與 Biome 互踩
+
+**EditorConfig**（根 `.editorconfig`）：UTF-8、LF、2 空格縮排、保留最後換行、去除行尾空白（`.md` 除外）。
+
+**Pre-commit hook**：目前未設定。如需 commit 前自動跑 lint/format，請另開任務導入 husky + lint-staged。
 
 ### TypeScript
 
@@ -409,6 +435,8 @@ pnpm --filter ./server test:watch      # 後端 watch 模式
 - 勿手動編輯 `prisma/migrations/*.sql`（歷史 migration 已上線）。
 - 勿在前端元件中硬寫中英文字串（用 i18n）。
 - 勿新增可選擴充點 / feature flag / backwards-compat shim 去支援尚未存在的需求。
+- 勿在 `server/` 跑 Prettier、或在 `app/` 跑 Biome（兩套 formatter 互踩會造成風格漂移）；`.prettierignore` 已排除 `server/`，請勿放行。
+- 勿用 `--unsafe` 套 Biome 的 unsafe fix、或對 ESLint 用 `--fix-type` 包山包海後一鍵 commit；逐條看過再 fix。
 
 ### 依賴版本注意
 
@@ -471,6 +499,7 @@ Dockerfile 依 Zeabur 命名慣例置於 **repo 根目錄**（`Dockerfile.<servi
    - 前端：Vue 3、Vue Router、Pinia、Vite、Tailwind CSS 4、vue-i18n、Axios
    - 後端：Fastify、Prisma、BullMQ、ioredis、ts-fsrs、Zod、jsonwebtoken、Pino
    - LLM：`@anthropic-ai/sdk`、`openai`、`@google/generative-ai`、`google-auth-library`
+   - Lint / 格式：`eslint`、`eslint-plugin-vue`、`@vue/eslint-config-typescript`、`typescript-eslint`、`eslint-config-prettier`、`@biomejs/biome`、`prettier`
    - 其他：Nuxt、Supabase（若專案未來採用）
 2. 生成程式碼後，請於**文末簡要標註**：
    ```

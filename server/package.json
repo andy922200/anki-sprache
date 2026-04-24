@@ -12,6 +12,10 @@
     "start": "node --env-file=.env dist/index.js",
     "start:worker": "node --env-file=.env dist/worker.js",
     "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "test": "vitest run",
     "test:watch": "vitest",
     "prisma": "prisma",
@@ -20,7 +24,6 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
     "@fastify/cookie": "^11.0.2",
-    "@prisma/adapter-pg": "^7.8.0",
     "@fastify/cors": "^11.2.0",
     "@fastify/helmet": "^13.0.2",
     "@fastify/rate-limit": "^10.3.0",
@@ -28,6 +31,7 @@
     "@fastify/swagger": "^9.7.0",
     "@fastify/swagger-ui": "^5.2.6",
     "@google/generative-ai": "^0.24.1",
+    "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "bullmq": "^5.76.1",
     "dotenv": "^17.4.2",
@@ -44,6 +48,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.13",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.19.17",
     "prettier": "^3.8.3",
