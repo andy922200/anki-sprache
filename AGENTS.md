@@ -336,14 +336,19 @@ pnpm --filter ./server test:watch      # 後端 watch 模式
 
 ### Rate Limit（Redis 後端）
 
-| 範圍 | 限制 |
-|---|---|
-| 全域（預設） | 300 req/min，key 為 `req.user.userId` 或 IP |
-| `POST /auth/google` | 10 req/min |
-| `POST /auth/refresh` | 60 req/min |
-| `POST /reviews` | 120 req/min |
-| `POST /generate/today` | prod 5/hr、dev 60/hr |
-| `POST /generate/more` | prod 10/hr、dev 60/hr |
+`@fastify/rate-limit` 於 `preHandler` hook 執行（`server/src/app.ts`），確保 `req.user` 與路由 decorator 已填入後才算 key。
+
+| 範圍 | 限制 | Key |
+|---|---|---|
+| 全域（預設） | 300 req/min | `userId` 或 IP |
+| `POST /auth/google` | 10 req/min | IP（未登入） |
+| `POST /auth/refresh` | 60 req/min | IP（未登入） |
+| `POST /reviews` | 120 req/min | `userId` |
+| `POST /generate/today` | prod 5/hr、dev 60/hr | `userId:provider:model` |
+| `POST /generate/more` | prod 10/hr、dev 60/hr | `userId:provider:model` |
+| `POST /generate/examples/upgrade` | prod 5/hr、dev 60/hr | `userId:provider:model` |
+
+> `/generate/*` 以 `provider:model` 作 bucket 尾綴，使用者切換偏好 LLM 後會拿到獨立的配額，不會因為先前模型用盡而共用限流。
 
 ### 其他防護
 

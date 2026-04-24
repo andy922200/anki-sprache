@@ -13,8 +13,8 @@ export default fp(async (app) => {
   const userGeneration = new Queue(QUEUE_NAMES.userGeneration, {
     connection,
     defaultJobOptions: {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 5_000 },
+      attempts: 2,
+      backoff: { type: 'exponential', delay: 2_000 },
       removeOnComplete: { count: 500 },
       removeOnFail: { count: 1000 },
     },

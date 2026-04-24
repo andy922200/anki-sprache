@@ -56,10 +56,13 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(redisPlugin)
   await app.register(bullmqPlugin)
 
-  // Global rate limit with Redis store
+  // Global rate limit with Redis store. Run at preHandler so req.user (set by
+  // authenticate) and per-route decorators (e.g. llmRateKey) are already
+  // populated when keyGenerator executes.
   await app.register(rateLimit, {
     max: 300,
     timeWindow: '1 minute',
+    hook: 'preHandler',
     redis: app.redis,
     keyGenerator: (req) => req.user?.userId ?? req.ip,
   })

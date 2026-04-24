@@ -44,6 +44,7 @@
     "generated": "已產生 {count} 個新單字",
     "generationFailed": "產生失敗：{error}",
     "generationTooSlow": "產生花費時間超過預期 — 請檢查 worker 日誌",
+    "generationStillRunning": "正在背景產生中 — 請稍後重新整理查看結果",
     "generationNetworkError": "產生失敗 — 網路錯誤",
     "generationStatusError": "產生失敗 ({status})：{message}",
     "pickProvider": "請先到設定中挑選偏好的 LLM 提供者",

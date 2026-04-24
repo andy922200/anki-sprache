@@ -44,6 +44,7 @@
     "generated": "Generated {count} new words",
     "generationFailed": "Generation failed: {error}",
     "generationTooSlow": "Generation is taking longer than expected — check worker logs",
+    "generationStillRunning": "Still generating in the background — refresh the page shortly to see results",
     "generationNetworkError": "Generation failed — network error",
     "generationStatusError": "Generation failed ({status}): {message}",
     "pickProvider": "Pick a preferred LLM provider in Settings first",

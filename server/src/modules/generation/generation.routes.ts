@@ -1,4 +1,5 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
+import type { FastifyRequest } from 'fastify'
 import type { Queue } from 'bullmq'
 import { z } from 'zod'
 import { QUEUE_NAMES } from '@/shared/plugins/bullmq.plugin.js'
@@ -31,16 +32,29 @@ async function isUserGenerationJobInFlight(
 const LlmProvider = z.enum(['OPENAI', 'ANTHROPIC', 'GOOGLE'])
 
 export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
+  app.decorateRequest('llmRateKey', '')
   app.addHook('preHandler', app.authenticate)
+
+  // Scope LLM-facing rate limit buckets by the user's currently selected
+  // provider+model so switching model gives the user a fresh bucket.
+  const attachLlmRateKey = async (req: FastifyRequest) => {
+    const s = await app.prisma.userSettings.findUnique({
+      where: { userId: req.user!.userId },
+      select: { preferredLlmProvider: true, preferredLlmModel: true },
+    })
+    req.llmRateKey = `${s?.preferredLlmProvider ?? 'NONE'}:${s?.preferredLlmModel ?? 'default'}`
+  }
+  const llmScopedKey = (req: FastifyRequest) => `${req.user!.userId}:${req.llmRateKey}`
 
   app.post(
     '/today',
     {
       config: {
         rateLimit: isDev
-          ? { max: 60, timeWindow: '1 hour' }
-          : { max: 5, timeWindow: '1 hour' },
+          ? { max: 60, timeWindow: '1 hour', keyGenerator: llmScopedKey }
+          : { max: 5, timeWindow: '1 hour', keyGenerator: llmScopedKey },
       },
+      preHandler: attachLlmRateKey,
       schema: {
         querystring: z.object({
           force: z
@@ -259,9 +273,10 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
     {
       config: {
         rateLimit: isDev
-          ? { max: 60, timeWindow: '1 hour' }
-          : { max: 10, timeWindow: '1 hour' },
+          ? { max: 60, timeWindow: '1 hour', keyGenerator: llmScopedKey }
+          : { max: 10, timeWindow: '1 hour', keyGenerator: llmScopedKey },
       },
+      preHandler: attachLlmRateKey,
       schema: {
         body: z.object({ count: z.number().int().min(1).max(20).default(5) }),
         response: { 202: z.object({ jobId: z.string(), status: z.literal('queued') }) },
@@ -311,9 +326,10 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
     {
       config: {
         rateLimit: isDev
-          ? { max: 60, timeWindow: '1 hour' }
-          : { max: 5, timeWindow: '1 hour' },
+          ? { max: 60, timeWindow: '1 hour', keyGenerator: llmScopedKey }
+          : { max: 5, timeWindow: '1 hour', keyGenerator: llmScopedKey },
       },
+      preHandler: attachLlmRateKey,
       schema: {
         response: {
           202: z.object({ jobId: z.string(), status: z.literal('queued') }),

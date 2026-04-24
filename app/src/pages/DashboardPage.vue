@@ -54,11 +54,10 @@ onMounted(async () => {
   await refresh()
 })
 
-const POLL_INTERVAL_MS = 3000
-// BullMQ retries a failed job up to 3 times with exponential backoff, and
-// each attempt can itself include adapter-level LLM retries. Budget ~2.5
-// minutes of polling so transient 5xx from the LLM don't look like errors.
-const POLL_MAX_ATTEMPTS = 50
+const POLL_INTERVAL_MS = 1500
+// Cap the user-facing wait at ~15s (10 × 1.5s). The BullMQ job may keep
+// running in the background; we tell the user to refresh rather than spin.
+const POLL_MAX_ATTEMPTS = 10
 
 async function onGenerate(force = false) {
   if (force) {
@@ -95,7 +94,7 @@ async function onGenerate(force = false) {
           }),
         )
       } else {
-        ui.toast('error', t('dashboard.generationTooSlow'))
+        ui.toast('info', t('dashboard.generationStillRunning'))
       }
     }
     await refresh()
@@ -142,14 +141,17 @@ async function onGenerateMore() {
     ui.toast('success', t('dashboard.generateMoreQueued'))
     // Poll until new cards show up (log.cardIds length grows)
     const before = status.value?.cardIds.length ?? 0
+    let grew = false
     for (let i = 0; i < POLL_MAX_ATTEMPTS; i++) {
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
       const s = await generationApi.getStatus()
       if (s.done && s.cardIds.length > before) {
         ui.toast('success', t('dashboard.generated', { count: s.cardIds.length - before }))
+        grew = true
         break
       }
     }
+    if (!grew) ui.toast('info', t('dashboard.generationStillRunning'))
     await refresh()
   } catch (err) {
     if (axios.isAxiosError(err)) {

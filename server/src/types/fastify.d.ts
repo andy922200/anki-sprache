@@ -21,6 +21,7 @@ declare module 'fastify' {
       userId: string
       email: string
     }
+    llmRateKey: string
   }
 }
 
