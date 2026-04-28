@@ -52,4 +52,36 @@ async function onLogout() {
       </div>
     </div>
   </header>
+
+  <!-- Mobile bottom tab bar — mirrors the desktop nav. App.vue adds matching
+       bottom padding to <main> so content isn't hidden behind it. -->
+  <nav
+    class="fixed inset-x-0 bottom-0 z-40 flex border-t border-brand-100 bg-white/95 backdrop-blur sm:hidden dark:bg-surface-dark/95 dark:border-surface-dark-muted"
+    style="padding-bottom: env(safe-area-inset-bottom)"
+  >
+    <RouterLink
+      to="/"
+      class="flex flex-1 flex-col items-center gap-0.5 py-2 text-xs text-ink-muted transition active:bg-surface-muted dark:active:bg-surface-dark-muted"
+      active-class="!text-brand-500"
+    >
+      <span class="text-xl leading-none">🏠</span>
+      <span>{{ t('header.today') }}</span>
+    </RouterLink>
+    <RouterLink
+      to="/logbook"
+      class="flex flex-1 flex-col items-center gap-0.5 py-2 text-xs text-ink-muted transition active:bg-surface-muted dark:active:bg-surface-dark-muted"
+      active-class="!text-brand-500"
+    >
+      <span class="text-xl leading-none">📓</span>
+      <span>{{ t('header.logbook') }}</span>
+    </RouterLink>
+    <RouterLink
+      to="/settings"
+      class="flex flex-1 flex-col items-center gap-0.5 py-2 text-xs text-ink-muted transition active:bg-surface-muted dark:active:bg-surface-dark-muted"
+      active-class="!text-brand-500"
+    >
+      <span class="text-xl leading-none">⚙️</span>
+      <span>{{ t('header.settings') }}</span>
+    </RouterLink>
+  </nav>
 </template>

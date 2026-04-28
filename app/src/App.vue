@@ -30,7 +30,7 @@ watch(
   </div>
   <div v-else class="flex min-h-full flex-col">
     <AppHeader v-if="auth.IS_AUTHENTICATED" />
-    <main class="flex-1">
+    <main class="flex-1" :class="{ 'pb-16 sm:pb-0': auth.IS_AUTHENTICATED }">
       <RouterView />
     </main>
     <AppToast />
