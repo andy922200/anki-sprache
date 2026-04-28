@@ -33,6 +33,7 @@ COPY --from=build /repo/server/dist ./server/dist
 COPY --from=build /repo/server/src/generated ./server/src/generated
 COPY --from=build /repo/server/prisma ./server/prisma
 COPY --from=build /repo/server/prisma.config.ts ./server/prisma.config.ts
+COPY --from=build /repo/server/scripts ./server/scripts
 COPY --from=build /repo/server/node_modules ./server/node_modules
 WORKDIR /repo/server
 EXPOSE 3000
