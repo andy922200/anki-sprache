@@ -1,6 +1,10 @@
 import type { LlmProvider, PrismaClient, VocabularyCard } from '@/generated/prisma/client.js'
 import type { Redis } from 'ioredis'
-import { buildDailyWordsPrompt, wordResponseSchema, type WordItem } from '@/shared/llm/prompts/dailyWords.js'
+import {
+  buildDailyWordsPrompt,
+  buildWordResponseSchema,
+  type WordItem,
+} from '@/shared/llm/prompts/dailyWords.js'
 import {
   buildCardAdjustmentPrompt,
   cardAdjustmentResponseSchema,
@@ -137,6 +141,7 @@ export async function generateForUser(
         settings.preferredLlmModel,
       )
       const prompt = buildDailyWordsPrompt({
+        targetLanguageCode: settings.targetLanguageCode,
         targetLanguageName: settings.targetLanguage.name,
         nativeLanguageName: settings.nativeLanguage.name,
         cefr: settings.cefrLevel,
@@ -150,7 +155,9 @@ export async function generateForUser(
       let errorCode: string | null = null
       try {
         const res = await adapter.complete(prompt)
-        const parsed = wordResponseSchema.safeParse(extractJson(res.content))
+        const parsed = buildWordResponseSchema(settings.targetLanguageCode).safeParse(
+          extractJson(res.content),
+        )
         if (!parsed.success) throw new Error('LLM returned invalid JSON shape')
         newItems = parsed.data.words.slice(0, needed)
         success = true
@@ -428,6 +435,7 @@ export async function generateAdditionalForUser(
         settings.preferredLlmModel,
       )
       const prompt = buildDailyWordsPrompt({
+        targetLanguageCode: settings.targetLanguageCode,
         targetLanguageName: settings.targetLanguage.name,
         nativeLanguageName: settings.nativeLanguage.name,
         cefr: settings.cefrLevel,
@@ -438,7 +446,9 @@ export async function generateAdditionalForUser(
       let newItems: WordItem[] = []
       try {
         const res = await adapter.complete(prompt)
-        const parsed = wordResponseSchema.safeParse(extractJson(res.content))
+        const parsed = buildWordResponseSchema(settings.targetLanguageCode).safeParse(
+          extractJson(res.content),
+        )
         if (!parsed.success) throw new Error('LLM returned invalid JSON shape')
         newItems = parsed.data.words.slice(0, needed)
         await prisma.llmUsageLog.create({
