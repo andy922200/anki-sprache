@@ -66,7 +66,7 @@ async function persistAudioUrl(
   prisma: PrismaClient,
   kind: AudioKind,
   id: string,
-  audioUrl: string,
+  audioUrl: string | null,
 ): Promise<void> {
   if (kind === 'lemma') {
     await prisma.vocabularyCard.update({ where: { id }, data: { audioUrl } })
@@ -97,7 +97,16 @@ export async function ensureAudio(
 ): Promise<string> {
   const target = await loadTarget(prisma, kind, id)
   if (!target) throw new Error(`${kind} ${id} not found`)
-  if (target.audioUrl) return target.audioUrl
+  if (target.audioUrl) {
+    // Validate the cached object actually exists on R2. Without this, an
+    // out-of-band deletion (audit-audio, lifecycle policy, manual op) leaves
+    // the DB pointing at a dead URL and every subsequent play 404s. On
+    // miss we drop the column so the rest of the function re-synthesizes
+    // and persists a fresh URL.
+    const cachedKey = extractKeyFromUrl(target.audioUrl)
+    if (cachedKey && (await objectExists(cachedKey))) return target.audioUrl
+    await persistAudioUrl(prisma, kind, id, null)
+  }
 
   const lockKey = `tts:lock:${kind}:${id}`
   const acquired = await redis.set(lockKey, '1', 'EX', LOCK_TTL_SECONDS, 'NX')
