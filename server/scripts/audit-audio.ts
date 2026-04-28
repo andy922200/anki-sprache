@@ -10,6 +10,8 @@
 // IMPORTANT: this hits whatever R2 bucket / DB the local .env points to.
 // Double-check the printed bucket + DB host before passing --confirm.
 
+import { writeFileSync } from 'node:fs'
+import { resolve as pathResolve } from 'node:path'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '../src/generated/prisma/client.js'
 import {
@@ -113,19 +115,46 @@ async function main() {
   }
 
   console.log(`Deleting ${orphans.length} orphan object(s) ...`)
-  let deleted = 0
-  let failed = 0
+  const deletedKeys: { key: string; size: number }[] = []
+  const failedKeys: { key: string; size: number; error: string }[] = []
   for (const o of orphans) {
     try {
       await deleteAudio(o.key)
-      deleted++
-      if (deleted % 25 === 0) console.log(`  ... ${deleted}/${orphans.length}`)
+      deletedKeys.push({ key: o.key, size: o.size })
+      if (deletedKeys.length % 25 === 0) {
+        console.log(`  ... ${deletedKeys.length}/${orphans.length}`)
+      }
     } catch (err) {
-      failed++
-      console.error(`  failed: ${o.key} — ${(err as Error).message}`)
+      const message = (err as Error).message
+      failedKeys.push({ key: o.key, size: o.size, error: message })
+      console.error(`  failed: ${o.key} — ${message}`)
     }
   }
-  console.log(`Done. deleted=${deleted}, failed=${failed}`)
+  console.log(`Done. deleted=${deletedKeys.length}, failed=${failedKeys.length}`)
+
+  // Write a per-run log so a misfire (wrong env, accidental --confirm) can be
+  // diagnosed afterwards. Filename includes UTC timestamp; the .gitignore
+  // pattern `audit-audio-*.json` keeps it out of commits.
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const logPath = pathResolve(process.cwd(), `audit-audio-${stamp}.json`)
+  writeFileSync(
+    logPath,
+    JSON.stringify(
+      {
+        runAt: new Date().toISOString(),
+        bucket: process.env.R2_BUCKET ?? null,
+        publicUrl: process.env.R2_PUBLIC_URL ?? null,
+        database: maskDb(process.env.DATABASE_URL ?? ''),
+        scanned: { totalObjects, totalBytes },
+        deleted: deletedKeys,
+        failed: failedKeys,
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  )
+  console.log(`Log written to ${logPath}`)
 }
 
 main()
