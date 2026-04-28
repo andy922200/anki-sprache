@@ -38,6 +38,7 @@
     "regenerateConfirm": "Regenerate today's {count} words?\n\nCards you haven't reviewed yet will be discarded. Cards you've already rated stay in your deck.",
     "dueNow": "Due now",
     "cardsReady": "{count} card ready | {count} cards ready",
+    "runningLow": "{count} due, below your daily target of {target}",
     "startFlip": "Start flip review",
     "multipleChoice": "Multiple choice",
     "preview": "Preview",

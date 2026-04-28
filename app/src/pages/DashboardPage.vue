@@ -21,10 +21,26 @@ const router = useRouter()
 const { t } = useI18n()
 
 const status = ref<GenerationStatusDto | null>(null)
-const dueCount = ref(0)
-const todayPreview = ref<CardDto[]>([])
+const dueCards = ref<CardDto[]>([])
 const busy = ref(false)
 const keys = ref<MaskedKeyDto[]>([])
+
+const dailyNewCount = computed<number>(() => settings.settings?.dailyNewCount ?? 5)
+const dueCount = computed<number>(() => dueCards.value.length)
+// Preview length tracks the user's daily-new-count setting; if the queue is
+// shorter than that, just show whatever's in there.
+const todayPreview = computed<CardDto[]>(() => dueCards.value.slice(0, dailyNewCount.value))
+
+// "Top up" affordance shows whenever today's deck exists and the due queue
+// has dropped below the user's daily target. Keeping the trigger explicit
+// (BYOK pays per LLM call) — we only surface the CTA, never auto-generate.
+const showTopUp = computed<boolean>(
+  () =>
+    !!status.value?.done &&
+    status.value.cardIds.length > 0 &&
+    dueCount.value < dailyNewCount.value,
+)
+const topUpCount = computed<number>(() => Math.max(1, dailyNewCount.value - dueCount.value))
 
 const preferredProvider = computed<LlmProvider | null>(
   () => settings.settings?.preferredLlmProvider ?? null,
@@ -38,15 +54,13 @@ const setupMissing = computed<'provider' | 'key' | null>(() => {
 })
 
 async function refresh() {
-  const [s, due, today, k] = await Promise.all([
+  const [s, due, k] = await Promise.all([
     generationApi.getStatus(),
     cardsApi.getDue(100),
-    cardsApi.getToday(),
     llmKeysApi.listKeys(),
   ])
   status.value = s
-  dueCount.value = due.length
-  todayPreview.value = today.slice(0, 5)
+  dueCards.value = due
   keys.value = k
 }
 
@@ -135,10 +149,11 @@ function onPractice() {
 }
 
 async function onGenerateMore() {
+  const count = topUpCount.value
   busy.value = true
   ui.beginBusy(t('dashboard.generateMoreQueued'))
   try {
-    await generationApi.generateMore(5)
+    await generationApi.generateMore(count)
     ui.toast('success', t('dashboard.generateMoreQueued'))
     // Poll until new cards show up (log.cardIds length grows)
     const before = status.value?.cardIds.length ?? 0
@@ -245,14 +260,25 @@ async function onGenerateMore() {
           {{ t('dashboard.multipleChoice') }}
         </AppButton>
       </div>
-      <div v-else-if="status?.done && status.cardIds.length > 0" class="mt-4">
-        <p class="mb-3 text-sm text-ink-muted">{{ t('dashboard.caughtUp') }}</p>
+      <div v-if="showTopUp" class="mt-4">
+        <p class="mb-3 text-sm text-ink-muted">
+          {{
+            dueCount === 0
+              ? t('dashboard.caughtUp')
+              : t('dashboard.runningLow', { count: dueCount, target: dailyNewCount })
+          }}
+        </p>
         <div class="flex flex-wrap gap-2">
-          <AppButton variant="secondary" :disabled="busy" @click="onPractice">
+          <AppButton
+            v-if="dueCount === 0"
+            variant="secondary"
+            :disabled="busy"
+            @click="onPractice"
+          >
             {{ t('dashboard.practiceAgain') }}
           </AppButton>
           <AppButton variant="ghost" :disabled="!!setupMissing || busy" @click="onGenerateMore">
-            {{ busy ? t('common.loading') : t('dashboard.generateMore', { count: 5 }) }}
+            {{ busy ? t('common.loading') : t('dashboard.generateMore', { count: topUpCount }) }}
           </AppButton>
         </div>
       </div>

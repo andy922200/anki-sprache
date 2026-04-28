@@ -38,6 +38,7 @@
     "regenerateConfirm": "重新產生今日 {count} 個單字？\n\n尚未複習的卡片會被捨棄，已評分過的卡片仍保留在你的牌組中。",
     "dueNow": "待複習",
     "cardsReady": "{count} 張卡片待複習",
+    "runningLow": "目前 {count} 張，未達每日 {target} 張",
     "startFlip": "開始翻牌複習",
     "multipleChoice": "選擇題",
     "preview": "預覽",
