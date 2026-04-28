@@ -30,3 +30,5 @@ coverage/
 
 server/prisma/migrations/**/*.sql.bak
 server/src/generated/
+
+.claude/settings.local.json
