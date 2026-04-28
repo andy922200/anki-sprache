@@ -48,7 +48,7 @@ function shuffle<T>(arr: T[]): T[] {
         {{ card.gender.toLowerCase() }}
       </p>
       <h2 class="text-4xl font-semibold">{{ card.lemma }}</h2>
-      <p v-if="card.ipa" class="mt-2 text-sm text-ink-muted">/{{ card.ipa }}/</p>
+      <p v-if="card.ipa" class="mt-2 text-sm text-ink-muted">{{ card.ipa }}</p>
     </div>
     <ul class="grid gap-3 sm:grid-cols-2">
       <li v-for="opt in options" :key="opt.id">

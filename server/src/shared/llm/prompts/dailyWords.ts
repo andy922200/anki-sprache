@@ -42,6 +42,16 @@ function getConvention(targetLanguageCode: string): LemmaConvention {
   return LEMMA_CONVENTIONS[targetLanguageCode] ?? NO_CONVENTION
 }
 
+// Strip any combination of leading/trailing slashes, brackets, and whitespace,
+// then re-wrap in /…/. Idempotent. Returns null when the inner content is
+// empty (e.g. raw was '', '[]', '//') so the column stays NULL rather than '//'.
+export function normalizeIpa(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const inner = raw.replace(/^[/\[\s]+|[/\]\s]+$/g, '')
+  if (!inner) return null
+  return `/${inner}/`
+}
+
 const baseFields = {
   lemma: z.string().min(1).max(60),
   pos: z
@@ -77,18 +87,24 @@ export function buildWordItemSchema(targetLanguageCode: string) {
   const conv = getConvention(targetLanguageCode)
 
   // Defense in depth: even with the prompt rule, models occasionally emit
-  // "die Stadt" for a noun lemma. The transform strips the article and
-  // backfills gender so the canonical (languageCode, lemma, pos) unique
-  // constraint actually dedups across runs.
+  // "die Stadt" for a noun lemma or "[fɛɐ̯]" for an IPA. The transform strips
+  // the article (so the (languageCode, lemma, pos) unique constraint dedups)
+  // and normalizes IPA to /…/ so DB never sees mixed conventions.
   return z.object(baseFields).transform((item) => {
-    if (item.pos !== 'NOUN' || !conv.articlePattern) return item
+    const ipa = normalizeIpa(item.ipa)
+    if (item.pos !== 'NOUN' || !conv.articlePattern) {
+      return { ...item, ipa }
+    }
     const m = conv.articlePattern.exec(item.lemma)
-    if (!m) return item
+    if (!m) {
+      return { ...item, ipa }
+    }
     const stripped = m[2]!.trim()
     const article = m[1]!
     const inferredGender = conv.toGender ? conv.toGender(article) : null
     return {
       ...item,
+      ipa,
       lemma: stripped,
       gender: item.gender ?? inferredGender ?? null,
     }
@@ -128,7 +144,7 @@ Return a JSON object with shape:
       "lemma": "string (dictionary form, NO article — see rules)",
       "pos": "NOUN|VERB|ADJECTIVE|ADVERB|PRONOUN|PREPOSITION|CONJUNCTION|ARTICLE|INTERJECTION|NUMERAL",
       "gender": "DER|DIE|DAS|null (REQUIRED for German nouns, null otherwise)",
-      "ipa": "string|null",
+      "ipa": "string in /.../ form (phonemic), or null",
       "translation": "translation into ${params.nativeLanguageName}",
       "sentences": [
         { "text": "example sentence in ${params.targetLanguageName}", "translation": "in ${params.nativeLanguageName}" }
@@ -139,6 +155,7 @@ Return a JSON object with shape:
 
 Rules:
 - Give exactly 2 example sentences per word, each under 20 words
+- IPA: phonemic notation wrapped in /.../, e.g. /ʃtat/, /fɛɐ̯ˈɡaŋənhaɪ̯t/. Never use [...] (phonetic).
 ${articleRule}
 - Non-noun lemmas: lowercase unless orthography requires otherwise
 - Avoid these lemmas: ${exclude.length ? exclude.join(', ') : '(none)'}

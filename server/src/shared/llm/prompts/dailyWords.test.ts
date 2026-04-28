@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildWordItemSchema } from './dailyWords.js'
+import { buildWordItemSchema, normalizeIpa } from './dailyWords.js'
 
 const baseSentences = [{ text: 'Foo bar baz.', translation: 'foo bar baz.' }]
 
@@ -56,5 +56,32 @@ describe('buildWordItemSchema', () => {
       sentences: baseSentences,
     })
     expect(out.lemma).toBe('le chat')
+  })
+
+  it('normalizes IPA via the schema transform regardless of pos/language', () => {
+    const out = buildWordItemSchema('en').parse({
+      lemma: 'cat',
+      pos: 'NOUN',
+      ipa: '[kæt]',
+      translation: 'cat',
+      sentences: baseSentences,
+    })
+    expect(out.ipa).toBe('/kæt/')
+  })
+})
+
+describe('normalizeIpa', () => {
+  it.each([
+    ['ʃtat', '/ʃtat/'],
+    ['/ʃtat/', '/ʃtat/'],
+    ['[fɛɐ̯ˈɡaŋənhaɪ̯t]', '/fɛɐ̯ˈɡaŋənhaɪ̯t/'],
+    ['  /kæt/  ', '/kæt/'],
+    ['/kæt]', '/kæt/'],
+  ])('wraps %j as %j', (input, expected) => {
+    expect(normalizeIpa(input)).toBe(expected)
+  })
+
+  it.each([null, undefined, '', '[]', '//', '   '])('returns null for %j', (input) => {
+    expect(normalizeIpa(input)).toBeNull()
   })
 })

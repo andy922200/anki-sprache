@@ -56,7 +56,7 @@ defineExpose({
               :fetcher="() => fetchLemmaAudio(card.id)"
             />
           </div>
-          <p v-if="card.ipa" class="mt-3 text-sm text-ink-muted wrap-break-word">/{{ card.ipa }}/</p>
+          <p v-if="card.ipa" class="mt-3 text-sm text-ink-muted wrap-break-word">{{ card.ipa }}</p>
           <p v-if="card.partOfSpeech" class="mt-2 text-xs uppercase tracking-wider text-ink-muted">
             {{ card.partOfSpeech.toLowerCase() }}
           </p>
