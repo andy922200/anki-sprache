@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { CardDto } from '@/types/domain'
+import { fetchLemmaAudio } from '@/api/cards.api'
+import AudioButton from './AudioButton.vue'
 
 interface Props {
   card: CardDto
@@ -47,7 +49,15 @@ function shuffle<T>(arr: T[]): T[] {
       <p v-if="card.gender" class="mb-2 text-sm uppercase tracking-wide text-ink-muted">
         {{ card.gender.toLowerCase() }}
       </p>
-      <h2 class="text-4xl font-semibold">{{ card.lemma }}</h2>
+      <div class="flex items-center justify-center gap-3 wrap-break-word">
+        <h2 class="text-4xl font-semibold">{{ card.lemma }}</h2>
+        <AudioButton
+          :key="card.id"
+          size="md"
+          :initial-url="card.audioUrl"
+          :fetcher="() => fetchLemmaAudio(card.id)"
+        />
+      </div>
       <p v-if="card.ipa" class="mt-2 text-sm text-ink-muted">{{ card.ipa }}</p>
     </div>
     <ul class="grid gap-3 sm:grid-cols-2">
