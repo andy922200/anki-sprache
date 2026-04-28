@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import {
   DeleteObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
@@ -55,6 +56,25 @@ export async function uploadAudio(
 
 export async function deleteAudio(key: string): Promise<void> {
   await r2.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET, Key: key }))
+}
+
+export async function* listAudioObjects(
+  prefix = 'audio/',
+): AsyncGenerator<{ key: string; size: number }> {
+  let continuationToken: string | undefined
+  do {
+    const res = await r2.send(
+      new ListObjectsV2Command({
+        Bucket: env.R2_BUCKET,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    )
+    for (const obj of res.Contents ?? []) {
+      if (obj.Key) yield { key: obj.Key, size: obj.Size ?? 0 }
+    }
+    continuationToken = res.IsTruncated ? res.NextContinuationToken : undefined
+  } while (continuationToken)
 }
 
 export async function objectExists(key: string): Promise<boolean> {
