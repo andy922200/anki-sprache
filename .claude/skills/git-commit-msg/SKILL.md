@@ -1,13 +1,19 @@
 ---
 name: git-commit-msg
-description: 撰寫 commit message。Conventional Commits + 正體中文 + 整行 ≤ 50 字；type 限定 feat/fix/chore/refactor/docs/style/perf/test 八種。
+description: 撰寫、修正、建議本專案 git commit message 時使用，包含使用者要您「順手 commit、訊息自己想」的情境。常見觸發句式：「加個 commit」、「加到 commit」、「commit 一下」、「commit 吧」、「提交一下」、「順便 commit」、「寫 commit message」、「改 commit 訊息」、「commit msg 幫我修」、「分兩個 commit」。SKIP：純看 git log / diff / blame、討論 commit hash、僅 stage 不 commit、只建 PR / branch / tag 而不寫訊息。規範：Conventional Commits（type(scope): 描述）+ 正體中文 + 整行 ≤ 50 字；type 限 feat/fix/chore/refactor/docs/style/perf/test 八種；不自行加 Co-Authored-By。
 ---
 
 # git-commit-msg
 
 ## 何時使用
 
-被要求撰寫、建議或修正本專案的 git commit message 時，套用以下規範。
+以下任一情境出現即套用本規範：
+
+- 被直接要求**撰寫、建議、修正**本專案的 git commit message。
+- 被要求**執行 commit** 且由您決定訊息內容。常見句式：「加個 commit」、「加到 commit」、「commit 一下」、「commit 吧」、「提交一下」、「順便 commit」、「分兩個 commit」。
+- 看到既有 commit message 不合規（type 錯、超 50 字、自行加 `Co-Authored-By`、英文混雜等）需修正。
+
+**不適用**：純查看 / 討論既有 commit（`git log` / `diff` / `blame`）、只 `git add` 不 commit、只建 PR / branch / tag 而不撰寫訊息。
 
 ## 格式
 
