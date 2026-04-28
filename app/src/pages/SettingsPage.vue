@@ -266,12 +266,12 @@ async function onUpgradeExamples() {
 </script>
 
 <template>
-  <div class="mx-auto max-w-2xl p-4 sm:p-6">
+  <div class="mx-auto max-w-2xl p-4 md:p-6">
     <h1 class="mb-4 text-2xl font-semibold">{{ t('settings.title') }}</h1>
 
     <AppCard class="mb-6">
       <h2 class="mb-3 text-lg font-semibold">{{ t('settings.profile') }}</h2>
-      <div class="grid gap-4 sm:grid-cols-2">
+      <div class="grid gap-4 md:grid-cols-2">
         <label class="text-sm">
           {{ t('settings.displayName') }}
           <input
@@ -294,7 +294,7 @@ async function onUpgradeExamples() {
 
     <AppCard v-if="draft" class="mb-6">
       <h2 class="mb-3 text-lg font-semibold">{{ t('settings.preferences') }}</h2>
-      <div class="grid gap-4 sm:grid-cols-2">
+      <div class="grid gap-4 md:grid-cols-2">
         <label class="text-sm">
           {{ t('settings.uiLanguage') }}
           <select
@@ -311,7 +311,7 @@ async function onUpgradeExamples() {
 
     <AppCard v-if="draft" class="mb-6">
       <h2 class="mb-3 text-lg font-semibold">{{ t('settings.learning') }}</h2>
-      <div class="grid gap-4 sm:grid-cols-2">
+      <div class="grid gap-4 md:grid-cols-2">
         <label class="text-sm">
           {{ t('settings.targetLanguage') }}
           <select
@@ -381,7 +381,7 @@ async function onUpgradeExamples() {
 
     <AppCard v-if="draft" class="mb-6">
       <h2 class="mb-3 text-lg font-semibold">{{ t('settings.llm') }}</h2>
-      <div class="grid gap-4 sm:grid-cols-2">
+      <div class="grid gap-4 md:grid-cols-2">
         <label class="text-sm">
           {{ t('settings.preferredProvider') }}
           <select

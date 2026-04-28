@@ -175,7 +175,7 @@ async function onGenerateMore() {
 </script>
 
 <template>
-  <div class="mx-auto max-w-3xl p-4 sm:p-6">
+  <div class="mx-auto max-w-3xl p-4 md:p-6">
     <AppCard padding="lg" class="mb-6">
       <h1 class="text-2xl font-semibold">
         {{ t('dashboard.greeting', { name: auth.user?.displayName ?? 'learner' }) }}
@@ -195,7 +195,7 @@ async function onGenerateMore() {
     />
 
     <AppCard v-if="!status?.done" class="mb-6">
-      <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex flex-col items-start gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 class="text-lg font-semibold">
             {{ t('dashboard.todayWords', { count: settings.settings?.dailyNewCount ?? 5 }) }}
@@ -209,7 +209,7 @@ async function onGenerateMore() {
     </AppCard>
 
     <AppCard v-else class="mb-6">
-      <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div class="flex flex-col items-start gap-3 md:flex-row md:items-start md:justify-between">
         <div class="flex-1">
           <h2 class="text-lg font-semibold">{{ t('dashboard.todayDeck') }}</h2>
           <p class="mt-1 text-sm text-ink-muted">

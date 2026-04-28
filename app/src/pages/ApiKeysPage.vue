@@ -80,7 +80,7 @@ async function remove(p: LlmProvider) {
 </script>
 
 <template>
-  <div class="mx-auto max-w-2xl p-4 sm:p-6">
+  <div class="mx-auto max-w-2xl p-4 md:p-6">
     <h1 class="mb-2 text-2xl font-semibold">{{ t('apiKeys.title') }}</h1>
     <p class="mb-6 text-sm text-ink-muted">{{ t('apiKeys.intro') }}</p>
 
@@ -95,7 +95,7 @@ async function remove(p: LlmProvider) {
       </div>
 
       <AppCard class="mb-4 border-2 border-brand-500">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 class="font-semibold">🔑 {{ providerLabel[primaryProvider] }}</h2>
             <p v-if="current(primaryProvider)" class="text-sm text-ink-muted">
@@ -113,7 +113,7 @@ async function remove(p: LlmProvider) {
             {{ t('apiKeys.remove') }}
           </AppButton>
         </div>
-        <div class="mt-4 flex flex-col gap-2 sm:flex-row">
+        <div class="mt-4 flex flex-col gap-2 md:flex-row">
           <input
             v-model="input[primaryProvider]"
             type="password"
@@ -151,7 +151,7 @@ async function remove(p: LlmProvider) {
 
     <div v-if="showOthers" class="mt-3 space-y-4">
       <AppCard v-for="p in otherProviders" :key="p">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 class="font-semibold">{{ providerLabel[p] }}</h2>
             <p v-if="current(p)" class="text-sm text-ink-muted">
@@ -169,7 +169,7 @@ async function remove(p: LlmProvider) {
             {{ t('apiKeys.remove') }}
           </AppButton>
         </div>
-        <div class="mt-4 flex flex-col gap-2 sm:flex-row">
+        <div class="mt-4 flex flex-col gap-2 md:flex-row">
           <input
             v-model="input[p]"
             type="password"

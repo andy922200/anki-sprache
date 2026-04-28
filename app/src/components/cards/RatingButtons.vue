@@ -34,7 +34,7 @@ const options: { value: FsrsRating; i18nKey: string; hotkey: string; className: 
 </script>
 
 <template>
-  <div class="grid w-full max-w-xl grid-cols-2 gap-3 sm:grid-cols-4">
+  <div class="grid w-full max-w-xl grid-cols-2 gap-3 md:grid-cols-4">
     <button
       v-for="o in options"
       :key="o.value"

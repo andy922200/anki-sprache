@@ -29,7 +29,7 @@ async function onLogout() {
         <span class="text-ink-muted">·</span>
         <span>Sprache</span>
       </RouterLink>
-      <nav class="hidden gap-1 sm:flex">
+      <nav class="hidden gap-1 md:flex">
         <RouterLink to="/" class="rounded-md px-3 py-1.5 text-sm hover:bg-surface-muted dark:hover:bg-surface-dark-muted" active-class="text-brand-500">{{ t('header.today') }}</RouterLink>
         <RouterLink to="/logbook" class="rounded-md px-3 py-1.5 text-sm hover:bg-surface-muted dark:hover:bg-surface-dark-muted" active-class="text-brand-500">{{ t('header.logbook') }}</RouterLink>
         <RouterLink to="/settings" class="rounded-md px-3 py-1.5 text-sm hover:bg-surface-muted dark:hover:bg-surface-dark-muted" active-class="text-brand-500">{{ t('header.settings') }}</RouterLink>
@@ -56,7 +56,7 @@ async function onLogout() {
   <!-- Mobile bottom tab bar — mirrors the desktop nav. App.vue adds matching
        bottom padding to <main> so content isn't hidden behind it. -->
   <nav
-    class="fixed inset-x-0 bottom-0 z-40 flex border-t border-brand-100 bg-white/95 backdrop-blur sm:hidden dark:bg-surface-dark/95 dark:border-surface-dark-muted"
+    class="fixed inset-x-0 bottom-0 z-40 flex border-t border-brand-100 bg-white/95 backdrop-blur md:hidden dark:bg-surface-dark/95 dark:border-surface-dark-muted"
     style="padding-bottom: env(safe-area-inset-bottom)"
   >
     <RouterLink

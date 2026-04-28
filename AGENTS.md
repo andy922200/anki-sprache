@@ -224,6 +224,13 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 - 樣式採 Tailwind utility-first；必要時用 `<style scoped lang="scss">`。
 - 圖示統一使用 Unicode emoji（目前無引入 icon library）。
 
+### Tailwind 響應式斷點
+
+- **禁用 `sm:`（≥640px）前綴。** 640px 太接近大型手機 landscape 寬度，作為 mobile / desktop 切換點容易讓人誤判：明明還是手機卻已跳成桌面版。
+- 桌面 / 平板分界一律用 `md:`（≥768px，平板 portrait 起跳）；確需更細層次再用 `lg:`（≥1024px）/ `xl:`（≥1280px）。
+- 例外：元件內部 size prop 名稱（如 `<AppButton size="sm">`、`AudioButton` 的 `sizeClass.sm`）的 `'sm'` 字串是設計系統尺寸命名（small / medium / large），與 RWD 斷點無關，不在此規範內。
+- 不需要動 `tailwind.config` 移除 `sm` 斷點定義 — 規範以 review 為主，斷點本身保留以免外部 plugin 用到。
+
 ### Fastify 後端
 
 - 路由一律使用 `fastify-type-provider-zod` v6，每個路由有 `schema: { body/params/query/response }`。

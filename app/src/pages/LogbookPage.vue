@@ -92,7 +92,7 @@ function fmtTime(iso: string) {
 </script>
 
 <template>
-  <div class="mx-auto max-w-3xl p-4 sm:p-6">
+  <div class="mx-auto max-w-3xl p-4 md:p-6">
     <h1 class="mb-4 text-2xl font-semibold">{{ t('logbook.title') }}</h1>
 
     <AppCard padding="sm" class="mb-4">
