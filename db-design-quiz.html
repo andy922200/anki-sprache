@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Anki-Sprache 資料表設計測驗</title>
+  <script src="https://cdn.jsdelivr.net/npm/@unocss/runtime/uno.global.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans TC', sans-serif;
+    }
+    pre {
+      font-family: 'SF Mono', Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .option {
+      transition: all 0.15s ease;
+    }
+    .option:not(.locked):hover {
+      border-color: #6366f1;
+      background: #eef2ff;
+    }
+    .option.selected {
+      border-color: #6366f1;
+      background: #eef2ff;
+    }
+    .option.correct {
+      border-color: #10b981 !important;
+      background: #d1fae5 !important;
+    }
+    .option.wrong {
+      border-color: #ef4444 !important;
+      background: #fee2e2 !important;
+    }
+    .option.locked {
+      cursor: default;
+    }
+    .option.dim {
+      opacity: 0.55;
+    }
+    .fade-in {
+      animation: fadeIn 0.25s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+  <div id="app" class="max-w-3xl mx-auto px-4 py-8 md:py-12"></div>
+
+  <script>
+    const QUESTIONS = [
+      {
+        title: '為何 User、VocabularyCard 等資料表 PK 使用 String @id @default(cuid()) 而不是自增整數？',
+        code: `model User {\n  id String @id @default(cuid())\n  email String @unique\n  ...\n}`,
+        options: [
+          'cuid 比 BIGINT 短、可節省可觀的儲存空間',
+          'cuid 是 URL 安全且時間排序友善的全域唯一字串；前端 / 跨服務交換 ID 時不會洩漏使用者數量，也避免分散式環境下的 ID 衝突',
+          'PostgreSQL 不支援 SERIAL / IDENTITY 欄位',
+          'Prisma 7 已禁用整數型 PK',
+        ],
+        correct: 1,
+        explanation: '自增整數會洩漏業務量（例如「我是第 12 號使用者」），且在多服務 / 多寫入點時容易撞 ID。cuid 是 collision-resistant、可在客戶端生成、URL 安全的字串，也方便 BullMQ / Redis 之間以字串 ID 來回傳遞。儲存成本（24 bytes vs 8 bytes）在這個量級可以忽略；安全與可移植性才是關鍵。',
+      },
+      {
+        title: '為何把 OAuthAccount 從 User 拆出，而不是直接在 User 上開 googleId、appleId 欄位？',
+        code: `model OAuthAccount {\n  id String @id @default(cuid())\n  userId String\n  provider OAuthProvider // GOOGLE | APPLE | GITHUB\n  providerAccountId String\n  @@unique([provider, providerAccountId])\n}`,
+        options: [
+          'Prisma 不允許在同一個 model 內存外部 ID',
+          '為了讓 User 同時綁多個 OAuth 提供者（例如先用 Google 再加 GitHub），且未來新增 provider 不必改 schema',
+          '把外部 ID 移到別張表才能加密',
+          '為了減少 User 的欄位數提升查詢效能',
+        ],
+        correct: 1,
+        explanation: '這是「一對多」結構的典型場景：一位使用者可能有 Google、Apple、GitHub 等多筆綁定，且未來增加 provider 時只需新增一筆 row 而不必改欄位。把 provider / providerAccountId 留在 User 上會把 schema 與供應商耦合，新增供應商就要 migration。',
+      },
+      {
+        title: 'OAuthAccount 上的 @@unique([provider, providerAccountId]) 是為了什麼？',
+        options: [
+          '主要為了加速 (provider, providerAccountId) 的查詢',
+          '確保「同一個 Google 帳號」不會被綁到兩個內部 User，維持外部身分 → 內部使用者的 1 對 1 對應',
+          'Prisma 規定每個 model 至少要有一個複合唯一鍵',
+          '避免 SQL Injection',
+        ],
+        correct: 1,
+        explanation: '如果沒有這個唯一鍵，惡意或意外情境下同一個 Google 帳號可能對應到兩筆 User，登入時就會搞不清楚要 hydrate 哪一位。註：唯一鍵會自動建立索引，因此「加速查詢」是副作用而非主要動機。',
+      },
+      {
+        title: 'RefreshToken 為何只存 tokenHash（且帶 @unique）而不存原始 token？',
+        code: `model RefreshToken {\n  tokenHash String @unique\n  expiresAt DateTime\n  revokedAt DateTime?\n  ...\n}`,
+        options: [
+          '節省空間：hash 比原 token 短',
+          '即使 DB 外洩，攻擊者也無法從 SHA-256 hash 還原原始 token；對齊「永遠不要明文存可驗證的密文」這條原則',
+          'Prisma 預設會把 String 欄位加密',
+          'JWT 規範要求伺服器不得保留原文',
+        ],
+        correct: 1,
+        explanation: '與密碼用 bcrypt / argon2 的精神一致：DB 只保留可驗證但不可還原的形式。@unique 既為了驗證階段的 O(log n) 查找，也保證同一 token 不會被誤插兩次。',
+      },
+      {
+        title: 'RefreshToken 為何有 revokedAt: DateTime? 而不是登出時直接 DELETE？',
+        options: [
+          'PostgreSQL 不允許刪除被外鍵參照的 row',
+          '為了重複使用偵測（reuse detection）與裝置稽核：保留歷史才能比對「已撤銷的 token 又出現」這種洩漏訊號，並可在管理頁顯示登入裝置',
+          'GDPR 要求保留 token 七年',
+          'Prisma 限制 cascade 行為',
+        ],
+        correct: 1,
+        explanation: '硬刪會抹去「這 token 曾經存在過」的證據，無法分辨「沒看過的 token」與「已撤銷的 token 被重放」。軟撤銷讓 rotation 流程可在被偷的 token 重新出現時偵測到並全鏈失效。',
+      },
+      {
+        title: 'UserSettings 為何把 userId 直接當 @id（而不是另起一個 settingsId）？',
+        code: `model UserSettings {\n  userId String @id\n  ...\n}`,
+        options: [
+          'Prisma 規定一個 model 必有 id 欄位',
+          '強制 1 對 1 關係：DB 層級保證一位 User 最多一筆 UserSettings，同時省掉一個無意義的代理鍵',
+          '為了加速 join',
+          '為了相容舊系統',
+        ],
+        correct: 1,
+        explanation: '把 userId 當主鍵時，PK 的唯一性自動保證 1:1。如果另開 settingsId，就還得補一個 userId @unique；多一個欄位、多一個索引、多一個出錯點，沒帶來任何好處。',
+      },
+      {
+        title: 'User 為何保留 deletedAt: DateTime? 做軟刪除，而不是直接 DELETE？',
+        options: [
+          'Prisma 不能 DELETE 帶 cascade 的 row',
+          '稽核 / 合規 / 反詐保留期；同時避免立即觸發大量 cascade 把 ReviewLog 等歷史一次性刪掉，可走排程的最終硬刪',
+          'PostgreSQL 對 DELETE 有效能限制',
+          '因為 Google 帳號會持續存在',
+        ],
+        correct: 1,
+        explanation: '軟刪除提供「冷靜期」與稽核窗口，並讓刪除是兩階段（marked → purged），運維上可選擇排程批次清理；硬刪一次性 cascade 可能在尖峰造成鎖等。',
+      },
+      {
+        title: 'LlmApiKey 把 encryptedKey、iv、authTag 拆成三個 Bytes 欄位，而不是塞成一個 blob，為什麼？',
+        code: `model LlmApiKey {\n  encryptedKey Bytes\n  iv           Bytes\n  authTag      Bytes\n  ...\n}`,
+        options: [
+          '因為三者長度不同',
+          'AES-GCM 解密需要原始 IV（每筆獨立、12 bytes）與 authTag（驗證完整性，16 bytes）；分欄存避免自製序列化格式踩 off-by-one、且每個欄位語意明確',
+          'PostgreSQL 不支援大的 BYTEA',
+          'Prisma 7 不支援 binary blob',
+        ],
+        correct: 1,
+        explanation: 'AES-GCM 是 authenticated encryption：必須用「相同的 IV」+「相同的 key」+「驗證 authTag」才能還原。塞成一個 blob 後又得自己定義切片格式，以後改長度規格就是地雷。三欄位讓 schema 自我描述，減少維護風險。',
+      },
+      {
+        title: '為何 LlmApiKey 上會有 @@unique([userId, provider])？',
+        options: [
+          '一位使用者對單一 LLM 提供者只該有一把 Key；兩把 OpenAI Key 並存會造成「到底用哪把」的不可預測性',
+          '為了讓查詢更快',
+          'Prisma 規定外鍵欄位必須出現在唯一鍵',
+          '避免 SQL Injection',
+        ],
+        correct: 0,
+        explanation: '配合 PUT /me/llm-keys/:provider 的 upsert 語意：使用者「替換」OpenAI Key 時，唯一鍵直接擔任 idempotency 的依據，不必先 SELECT 再判斷。',
+      },
+      {
+        title: 'Language 為何是一張表（code 為 PK），而不是像 CEFR 那樣做 enum？',
+        code: `model Language {\n  code       String  @id  // "de", "en", "ja"...\n  name       String\n  nativeName String\n  enabled    Boolean @default(true)\n}`,
+        options: [
+          '語言列表會隨產品開新市場而動態增刪，且每筆要帶 metadata（顯示名稱、是否啟用）；enum 變更需要 DB migration 且無法附加欄位',
+          'Prisma 7 不再支援 enum',
+          'PostgreSQL enum 上限 256 個值',
+          'ISO 標準禁止用 enum 表示語言',
+        ],
+        correct: 0,
+        explanation: 'enum 適合「值集穩定、無附帶屬性」的場景（CEFR、FsrsState）。語言則經常要附加 nativeName / enabled 這類欄位、且新增 / 停用是運營決策不該觸發 migration，所以做成查表（lookup table）是更合適的設計。',
+      },
+      {
+        title: 'VocabularyCard 為何使用 @@unique([languageCode, lemma, partOfSpeech]) 三欄複合唯一鍵？',
+        code: `@@unique([languageCode, lemma, partOfSpeech])`,
+        options: [
+          '為了 SEO',
+          '同一語言內，同 lemma 但不同詞性是合理的不同卡片（如英文 run 動詞 vs 名詞、德文 Sehen 名詞 vs sehen 動詞），三欄複合唯一才能正確去重',
+          'Prisma 強制每張內容表要有三欄唯一鍵',
+          'PostgreSQL 限制單欄唯一鍵長度',
+        ],
+        correct: 1,
+        explanation: '只用 (languageCode, lemma) 會把不同詞性的同形字併成一張卡，導致複習時例句與翻譯張冠李戴。把詞性納入唯一鍵，正是把「卡片身分」定義為（語言, 詞元, 詞性）三元組。',
+      },
+      {
+        title: 'CardTranslation 為何是獨立一張表，而不是在 VocabularyCard 上加 translationEn、translationZh 等欄位？',
+        code: `model CardTranslation {\n  cardId             String\n  nativeLanguageCode String\n  translation        String\n  @@unique([cardId, nativeLanguageCode])\n}`,
+        options: [
+          '為了壓縮儲存',
+          '一張卡可被翻成多種母語（依使用者 nativeLanguageCode 動態挑選）；row 結構可水平擴張任意母語、避免欄位數量隨支援語言無限膨脹',
+          'Prisma 不支援多語欄位',
+          'PostgreSQL 不支援多欄 nullable',
+        ],
+        correct: 1,
+        explanation: '欄位化會把 schema 與支援語言耦合 —— 每加一種母語就要一次 migration。改成 (cardId, nativeLanguageCode) 唯一的子表後，新母語只是新 row，並可漸進式回填。',
+      },
+      {
+        title: 'ExampleSentence 為何是 VocabularyCard 的子表？',
+        code: `model ExampleSentence {\n  cardId     String\n  cefrLevel  CEFR  @default(A1)\n  text       String\n  orderIndex Int   @default(0)\n  @@index([cardId, cefrLevel])\n}`,
+        options: [
+          '一張卡可有多句例句，依 CEFR 分級顯示給不同程度的學習者，並用 orderIndex 排序；本質就是 1 對 N',
+          '例句字數太長無法塞進 VocabularyCard 同一 row',
+          '為了避免重複例句',
+          '為了使用 PostgreSQL 全文檢索',
+        ],
+        correct: 0,
+        explanation: '把例句拆出來才能讓 A1 的學習者只看 A1 例句，C1 學到 C1 例句；同時 (cardId, cefrLevel) 索引讓「找這張卡的某級例句」是一次 index range scan。',
+      },
+      {
+        title: 'DailyGenerationLog.generationDate 為何用 @db.Date（而不是 DateTime）？',
+        code: `generationDate DateTime @db.Date`,
+        options: [
+          '節省 4 bytes',
+          '「使用者本地時區的某天」是日期語意，沒有時刻；用 DATE 型別避免 timestamp 比較時被時區轉換誤判，唯一鍵 (userId, generationDate, languageCode) 才能精準判定「同一天」',
+          'Prisma 規定 @unique 欄位必為 Date',
+          'PostgreSQL 對 DATE 才支援唯一索引',
+        ],
+        correct: 1,
+        explanation: '若用 timestamptz，就要在比較時自己處理「使用者本地 04:00 是 UTC 幾點」，每處比較都是潛在 bug。用 DATE 型別把日界決策上推到寫入時機（worker 已用使用者時區），讀取時就單純做日期相等比對。',
+      },
+      {
+        title: 'UserCardState 為何 @@unique([userId, cardId])？',
+        options: [
+          '為了排序',
+          '每位使用者對每張卡片只該有一份 FSRS 狀態；重複 row 會讓排程器拿到衝突的 due / stability，無法決定該以哪份為準',
+          '加速插入',
+          'Prisma 規定每張表要有複合唯一鍵',
+        ],
+        correct: 1,
+        explanation: '這個唯一鍵也是 ReviewLog 提交時做 upsert 的依據（先找 userId+cardId 的 state，再更新）。沒有它，FSRS 會在使用者第一次評分後就可能寫出第二筆 state，行為不可預期。',
+      },
+      {
+        title: '為何把 due / stability / lapses 放在 UserCardState，而不是直接掛在 VocabularyCard？',
+        options: [
+          '為了減少 join',
+          'VocabularyCard 是「共用內容字典」（所有使用者共享同一張卡），但 FSRS 狀態是 per-user 的學習軌跡，分表才能做到內容共享 + 個人化排程',
+          'Prisma 不支援把計算欄位放在主表',
+          '為了在 Redis 中快取',
+        ],
+        correct: 1,
+        explanation: '這是「全域內容 vs 使用者狀態」的經典切分。把 due 放 VocabularyCard 等於暗示這張卡只屬於一位使用者，未來就無法做共享題庫、無法統計「這張卡被多少人標記為 AGAIN」。',
+      },
+      {
+        title: 'ReviewLog 為何同時記錄 stabilityBefore / stabilityAfter（以及 difficulty、state 的前後對）？',
+        code: `model ReviewLog {\n  stabilityBefore   Float\n  stabilityAfter    Float\n  difficultyBefore  Float\n  difficultyAfter   Float\n  stateBefore       FsrsState\n  stateAfter        FsrsState\n  ...\n}`,
+        options: [
+          '為了之後重訓 FSRS 模型',
+          '提供完整可重放（replay）的審計軌跡：可離線驗證 / 重新計算排程，UI 可顯示複習前後變化；若只存 after 就無法還原當下決策的脈絡',
+          '為了減少 join',
+          'Prisma 規定每筆 log 要有 before / after',
+        ],
+        correct: 1,
+        explanation: 'FSRS 的參數可能日後升級，存「前後快照」可以離線重新評估「若用新參數，當時這次評分會走到哪個排程」，是一種去耦演算法版本與歷史的方式。Logbook 顯示「stability 0.5 → 1.2」也直接從這裡讀。',
+      },
+      {
+        title: 'UserCardState 上的 @@index([userId, due]) 為什麼是必要的？',
+        code: `@@index([userId, due])`,
+        options: [
+          '為了 join User 表',
+          '排序需要才有索引',
+          '主要查詢是「某使用者下到期（due ≤ now）的卡」；複合索引讓這個 range scan 是 O(log n)，否則每次取「今天該複習什麼」都得全表掃描',
+          'Prisma 強制每張 model 要有索引',
+        ],
+        correct: 2,
+        explanation: '這條索引是 / cards/due 路由與 worker 排程的命脈：每位使用者每天會打很多次。複合索引欄位順序很重要 —— userId 在前可先把搜尋空間縮到單一使用者，再對 due 做 range，效率最佳。',
+      },
+      {
+        title: 'DailyGenerationLog 上的 @@unique([userId, generationDate, languageCode]) 是為了什麼？',
+        options: [
+          '加速 cursor 分頁',
+          '同一位使用者同一天同一目標語言只該被生成一次；唯一鍵 + Redis 鎖讓多 worker / 重啟 / 重試之下也只成功插入一筆，作為 idempotency 的最後一道防線',
+          'PostgreSQL 規範',
+          '為了 sorting',
+        ],
+        correct: 1,
+        explanation: '分散式系統的去重很難只靠程式邏輯；最穩的做法是讓 DB 層丟唯一鍵衝突，重複作業在 INSERT 那一瞬間就被擋掉。Redis 鎖負責「同時間別跑兩次」，唯一鍵負責「鎖過期後仍不能重複」。',
+      },
+      {
+        title: 'DailyGenerationLog.cardIds 為何用 String[]，而不是另開一張 join table？',
+        code: `model DailyGenerationLog {\n  cardIds String[]\n  ...\n}`,
+        options: [
+          'PostgreSQL 不支援多對多 join',
+          '此關聯是 snapshot（紀錄當天生成了哪些卡），不會被反查（不會問「這張卡在哪幾天被生成」）；陣列存取夠用且省一張表 + 兩個索引',
+          'Prisma 不支援多對多',
+          '為了相容 MongoDB',
+        ],
+        correct: 1,
+        explanation: 'PostgreSQL 的陣列在「資料只會被父 row 一起讀寫、不會反向查」時是合理的物理設計選擇。如果未來要支援「查找這張卡曾在哪幾天被生成」，再升級成 join table；過早正規化會多兩個索引維護成本。',
+      },
+      {
+        title: 'LlmUsageLog 為何記錄每一次呼叫，包含失敗（success: Boolean、errorCode）？',
+        code: `model LlmUsageLog {\n  promptTokens     Int     @default(0)\n  completionTokens Int     @default(0)\n  latencyMs        Int     @default(0)\n  success          Boolean\n  errorCode        String?\n  ...\n}`,
+        options: [
+          '計費 / 配額 / 錯誤率分析三件事都需要：失敗仍可能消耗 token，且 UI 需顯示「最近錯誤」協助使用者除錯',
+          '為了訓練 LLM',
+          'Prisma 規範',
+          '為了給 LLM 廠商對帳',
+        ],
+        correct: 0,
+        explanation: 'BYOK 架構下「使用者花了自己多少錢、為什麼失敗、是 quota 還是 4xx」三件事都需要可追溯。只記成功會讓 dashboard 看不到 incident、也讓限流 / 重試政策難以調整。',
+      },
+      {
+        title: '為何大多數使用者私有資料的關聯都用 onDelete: Cascade？',
+        code: `user User @relation(fields: [userId], references: [id], onDelete: Cascade)`,
+        options: [
+          '預設值，沒特別意義',
+          '使用者註銷時，其私有資料（refresh token、settings、states、reviews、API keys）必須一併移除以符合資料保護；由 DB 層保證一致性，比 application 自己刪可靠',
+          '為了效能',
+          'Prisma 預設 Cascade',
+        ],
+        correct: 1,
+        explanation: 'Prisma 預設是 NoAction（外鍵保護），因此 Cascade 是顯式選擇。把刪除責任交給 DB 而非 application 層，可避免「刪到一半失敗，留下孤兒紀錄」的中間態，並讓「刪除使用者」就是字面意義的一個 DELETE。',
+      },
+      {
+        title: 'CEFR 為何用 enum 而不是 String "A1"？',
+        code: `enum CEFR { A1 A2 B1 B2 C1 C2 }`,
+        options: [
+          'Enum 比較省 byte',
+          'Postgres enum 提供 DB 層型別安全（不可寫入意外值）+ Prisma 自動產生 TS 型別讓前後端共享受控詞彙；CEFR 集合穩定、不需要 metadata，符合 enum 適用情境',
+          'String 在 Postgres 沒有索引',
+          'Prisma 7 強制使用 enum',
+        ],
+        correct: 1,
+        explanation: '與 Q10（Language 為何是表）對照：值集穩定 + 不需要附帶欄位 → enum；值集會變動或要帶 metadata → 查表。CEFR 是 ISO 標準的固定六級，enum 完美貼合。',
+      },
+      {
+        title: 'VocabularyCard.partOfSpeech 為何被允許為 NULL，即使它是 @@unique 的一部分？',
+        code: `partOfSpeech PartOfSpeech?\n@@unique([languageCode, lemma, partOfSpeech])`,
+        options: [
+          '某些卡片（如固定片語、感嘆詞、跨詞性的 lemma）難以歸類；允許 null 同時利用 PostgreSQL 對 NULL 在 UNIQUE 索引中視為「彼此不相等」的特性',
+          'Prisma 強制 enum 為 nullable',
+          '為了向前相容舊資料',
+          'PostgreSQL 不允許 enum 不為 null',
+        ],
+        correct: 0,
+        explanation: '這是 PostgreSQL 一個很重要的細節：UNIQUE 索引中 NULL 不會被視為與另一個 NULL 相同，所以 (de, "hallo", NULL) 與 (de, "hallo", NULL) 兩筆並不會衝突。設計時要意識到這個 footgun —— 真的要嚴格阻擋，才會用 partial index 或 COALESCE 自訂索引。',
+      },
+      {
+        title: '為何 VocabularyCard.audioUrl 與 ExampleSentence.audioUrl 都各自有一個欄位？',
+        code: `model VocabularyCard { audioUrl String? }\nmodel ExampleSentence { audioUrl String? }`,
+        options: [
+          'Card 上的 audio 是 lemma（單字）的發音；Example 上的 audio 是整句的發音 — 兩者用途不同、來源是不同的 TTS 呼叫，分別快取 URL 才合理',
+          '為了減少 join',
+          'Prisma 不支援共用欄位',
+          '為了相容多 CDN',
+        ],
+        correct: 0,
+        explanation: '單字音檔可以重用（同一張卡共用一段音訊），例句音檔則綁定該句的語境與重音。把 audioUrl 統一拉到一個共用表會強迫兩種語意混用，反而失去「一張卡一個發音、一句例句一段語音」的對應關係。',
+      },
+    ];
+
+    let currentIdx = 0;
+    let answers = []; // { selected, correct }
+
+    const root = document.getElementById('app');
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+
+    function renderHeader() {
+      const total = QUESTIONS.length;
+      const done = answers.length;
+      const pct = Math.round((done / total) * 100);
+      return `
+        <header class="mb-8">
+          <h1 class="text-2xl md:text-3xl font-bold text-slate-900 mb-2">
+            Anki-Sprache 資料表設計測驗
+          </h1>
+          <p class="text-sm text-slate-600 mb-4">
+            針對本專案 Prisma schema 的 25 道單選題，測驗你對「為什麼這樣設計」的理解。
+          </p>
+          <div class="flex items-center gap-3">
+            <div class="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+              <div class="h-full bg-indigo-500 transition-all" style="width: ${pct}%"></div>
+            </div>
+            <span class="text-xs text-slate-500 font-mono">${done} / ${total}</span>
+          </div>
+        </header>
+      `;
+    }
+
+    function renderQuestion() {
+      const q = QUESTIONS[currentIdx];
+      const a = answers[currentIdx];
+      const locked = !!a;
+
+      const codeBlock = q.code
+        ? `<pre class="bg-slate-900 text-slate-100 rounded-lg p-4 my-4 overflow-x-auto whitespace-pre">${escapeHtml(q.code)}</pre>`
+        : '';
+
+      const options = q.options.map((opt, i) => {
+        let cls = 'option border-2 border-slate-200 rounded-lg p-4 cursor-pointer flex gap-3 items-start';
+        if (locked) {
+          cls += ' locked';
+          if (i === q.correct) cls += ' correct';
+          else if (i === a.selected) cls += ' wrong';
+          else cls += ' dim';
+        } else if (a && a.selected === i) {
+          cls += ' selected';
+        }
+
+        const label = String.fromCharCode(65 + i);
+        return `
+          <div class="${cls}" data-idx="${i}">
+            <span class="font-mono font-bold text-indigo-600 shrink-0">${label}.</span>
+            <span class="text-sm md:text-base leading-relaxed">${escapeHtml(opt)}</span>
+          </div>
+        `;
+      }).join('');
+
+      const explanationBlock = locked
+        ? `
+          <div class="fade-in mt-6 rounded-lg border-2 ${a.selected === q.correct ? 'border-emerald-300 bg-emerald-50' : 'border-rose-300 bg-rose-50'} p-5">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="font-bold ${a.selected === q.correct ? 'text-emerald-700' : 'text-rose-700'}">
+                ${a.selected === q.correct ? '✓ 答對了' : '✗ 答錯了'}
+              </span>
+              <span class="text-xs text-slate-500">
+                正解：${String.fromCharCode(65 + q.correct)}
+              </span>
+            </div>
+            <p class="text-sm leading-relaxed text-slate-700">${escapeHtml(q.explanation)}</p>
+          </div>
+        `
+        : '';
+
+      const nav = locked
+        ? `
+          <div class="mt-6 flex justify-between items-center">
+            <button id="prevBtn" class="px-4 py-2 text-sm text-slate-500 hover:text-slate-800 ${currentIdx === 0 ? 'invisible' : ''}">
+              ← 上一題
+            </button>
+            <button id="nextBtn" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm">
+              ${currentIdx === QUESTIONS.length - 1 ? '查看總成績 →' : '下一題 →'}
+            </button>
+          </div>
+        `
+        : `
+          <div class="mt-6 flex justify-between items-center">
+            <button id="prevBtn" class="px-4 py-2 text-sm text-slate-500 hover:text-slate-800 ${currentIdx === 0 ? 'invisible' : ''}">
+              ← 上一題
+            </button>
+            <p class="text-xs text-slate-400">點擊任一選項提交答案</p>
+          </div>
+        `;
+
+      return `
+        ${renderHeader()}
+        <article class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
+          <div class="text-xs text-slate-400 font-mono mb-2">第 ${currentIdx + 1} / ${QUESTIONS.length} 題</div>
+          <h2 class="text-lg md:text-xl font-semibold text-slate-900 leading-relaxed mb-2">
+            ${escapeHtml(q.title)}
+          </h2>
+          ${codeBlock}
+          <div class="space-y-3 mt-5">
+            ${options}
+          </div>
+          ${explanationBlock}
+          ${nav}
+        </article>
+      `;
+    }
+
+    function renderResult() {
+      const correct = answers.reduce((sum, a, i) => sum + (a.selected === QUESTIONS[i].correct ? 1 : 0), 0);
+      const total = QUESTIONS.length;
+      const pct = Math.round((correct / total) * 100);
+
+      let label, color;
+      if (pct >= 90) { label = '對 schema 的設計脈絡掌握得很完整 🎯'; color = 'emerald'; }
+      else if (pct >= 70) { label = '主要概念都通了，少數細節再補強'; color = 'sky'; }
+      else if (pct >= 50) { label = '掌握一半，建議回頭看 AGENTS.md 的「最佳實踐」段'; color = 'amber'; }
+      else { label = '建議回去細看 schema.prisma 與 AGENTS.md'; color = 'rose'; }
+
+      const reviewItems = QUESTIONS.map((q, i) => {
+        const a = answers[i];
+        const ok = a.selected === q.correct;
+        return `
+          <li class="border-l-4 ${ok ? 'border-emerald-400' : 'border-rose-400'} pl-3 py-1">
+            <div class="text-xs text-slate-400 font-mono">Q${i + 1}</div>
+            <div class="text-sm font-medium text-slate-800">${escapeHtml(q.title)}</div>
+            <div class="text-xs text-slate-500 mt-1">
+              你的答案：${String.fromCharCode(65 + a.selected)}・正解：${String.fromCharCode(65 + q.correct)}
+            </div>
+          </li>
+        `;
+      }).join('');
+
+      return `
+        <header class="mb-8 text-center">
+          <h1 class="text-3xl font-bold text-slate-900 mb-3">作答完成</h1>
+        </header>
+        <article class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center">
+          <div class="text-6xl font-bold text-${color}-600 mb-2">${correct} / ${total}</div>
+          <div class="text-lg text-slate-700 mb-2">${pct} 分</div>
+          <p class="text-sm text-slate-600 mb-6">${label}</p>
+          <button id="restartBtn" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm">
+            重新作答
+          </button>
+        </article>
+        <section class="mt-8 bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+          <h2 class="text-base font-semibold text-slate-900 mb-4">逐題回顧</h2>
+          <ul class="space-y-3">${reviewItems}</ul>
+        </section>
+      `;
+    }
+
+    function render() {
+      const showResult = answers.length === QUESTIONS.length && currentIdx >= QUESTIONS.length;
+      root.innerHTML = showResult ? renderResult() : renderQuestion();
+      bindEvents(showResult);
+    }
+
+    function bindEvents(showResult) {
+      if (showResult) {
+        document.getElementById('restartBtn').addEventListener('click', () => {
+          currentIdx = 0;
+          answers = [];
+          render();
+        });
+        return;
+      }
+
+      const a = answers[currentIdx];
+      if (!a) {
+        document.querySelectorAll('.option').forEach((el) => {
+          el.addEventListener('click', () => {
+            const idx = Number(el.dataset.idx);
+            answers[currentIdx] = { selected: idx };
+            render();
+          });
+        });
+      }
+
+      const prev = document.getElementById('prevBtn');
+      if (prev) {
+        prev.addEventListener('click', () => {
+          if (currentIdx > 0) {
+            currentIdx -= 1;
+            render();
+          }
+        });
+      }
+
+      const next = document.getElementById('nextBtn');
+      if (next) {
+        next.addEventListener('click', () => {
+          currentIdx += 1;
+          render();
+        });
+      }
+    }
+
+    render();
+  </script>
+</body>
+</html>
