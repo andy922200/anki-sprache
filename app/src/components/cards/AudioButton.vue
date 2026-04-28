@@ -62,6 +62,26 @@ async function play() {
   }
 
   try {
+    await tryPlay()
+  } catch (err) {
+    if (isInterruption(err)) return
+    // Cached `currentUrl` may be a stale reference whose R2 object has been
+    // removed (audit-audio cleanup, lifecycle policy, etc.). Drop it and
+    // ask the backend for a fresh URL — ensureAudio HEAD-validates and
+    // re-synthesizes when the object is missing.
+    currentUrl.value = null
+    stopAndRelease()
+    try {
+      await tryPlay()
+    } catch (err2) {
+      isPlaying.value = false
+      if (!isInterruption(err2)) ui.toast('error', t('card.audio.error'))
+    }
+  }
+}
+
+async function tryPlay() {
+  try {
     if (!currentUrl.value) {
       isLoading.value = true
       ui.beginBusy(t('card.audio.generating'), 'card.audio.subtext', true)
@@ -71,19 +91,16 @@ async function play() {
         ui.endBusy()
       }
     }
-    audio = new Audio(currentUrl.value)
-    audio.onended = () => {
-      isPlaying.value = false
-    }
-    audio.onerror = () => {
-      isPlaying.value = false
-      ui.toast('error', t('card.audio.error'))
-    }
-    isPlaying.value = true
-    await audio.play()
-  } catch (err) {
-    isPlaying.value = false
-    if (!isInterruption(err)) ui.toast('error', t('card.audio.error'))
+    await new Promise<void>((resolve, reject) => {
+      const a = new Audio(currentUrl.value!)
+      audio = a
+      a.onended = () => {
+        isPlaying.value = false
+      }
+      a.onerror = () => reject(new Error('audio_load_error'))
+      isPlaying.value = true
+      a.play().then(resolve).catch(reject)
+    })
   } finally {
     isLoading.value = false
   }
