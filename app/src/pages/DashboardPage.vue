@@ -38,14 +38,15 @@ const setupMissing = computed<'provider' | 'key' | null>(() => {
 })
 
 async function refresh() {
-  const [s, due, k] = await Promise.all([
+  const [s, due, today, k] = await Promise.all([
     generationApi.getStatus(),
     cardsApi.getDue(100),
+    cardsApi.getToday(),
     llmKeysApi.listKeys(),
   ])
   status.value = s
   dueCount.value = due.length
-  todayPreview.value = due.slice(0, 5)
+  todayPreview.value = today.slice(0, 5)
   keys.value = k
 }
 
