@@ -34,5 +34,6 @@ server/prisma/migrations/**/*.sql.bak
 server/src/generated/
 
 audit-audio-*.json
+prune-audio-*.json
 
 .claude/settings.local.json

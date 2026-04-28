@@ -20,7 +20,8 @@
     "test:watch": "vitest",
     "prisma": "prisma",
     "prisma:generate": "prisma generate",
-    "audit:audio": "tsx --env-file=.env scripts/audit-audio.ts"
+    "audit:audio": "tsx --env-file=.env scripts/audit-audio.ts",
+    "prune:audio:lang": "tsx --env-file=.env scripts/prune-audio-by-language.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
