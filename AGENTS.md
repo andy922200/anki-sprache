@@ -334,12 +334,23 @@ pnpm --filter ./server test:watch      # 後端 watch 模式
 ```ts
 {
   httpOnly: true,
-  secure: env.COOKIE_SECURE || isProd,   // production 必定為 true
-  sameSite: 'lax',                        // 允許 top-level 導航、阻擋跨站 XHR
+  // production 自動 true；sameSite='none' 也會強制升 Secure（瀏覽器強制要求兩者並用）
+  secure: env.COOKIE_SECURE || isProd || env.COOKIE_SAMESITE === 'none',
+  sameSite: env.COOKIE_SAMESITE,          // 'lax' | 'strict' | 'none'，預設 'lax'
   path: '/',
   domain: env.COOKIE_DOMAIN || undefined, // localhost 請省略
 }
 ```
+
+**`COOKIE_SAMESITE` 怎麼選**：
+
+| 部署形態 | 設定 | 說明 |
+|---|---|---|
+| localhost dev | `lax`（預設） | 同站不同 port 仍是 same-site，cookie 正常往返 |
+| 同根域 prod（`app.example.com` ↔ `api.example.com`） | `lax`（預設） | 兩個 subdomain 同 eTLD+1，same-site；可搭配 `COOKIE_DOMAIN=.example.com` 共用 |
+| 跨根域或公共後綴（`anki-sprache.zeabur.app` ↔ `api-anki-sprache.zeabur.app`） | **`none`** | `*.zeabur.app` 在 [public suffix list](https://publicsuffix.org/) 上 → 兩個 subdomain 被瀏覽器視為跨站，`lax` 不會在 XHR 上送 cookie。`none` 必須搭配 `secure=true`（程式碼會自動強制） |
+
+`COOKIE_DOMAIN` 在 PSL 上的子網域**不能**設成根域（如 `zeabur.app`）— 瀏覽器會拒收。改設成 host-only（從 env 移除或設成 `localhost` 觸發 host-only 分支）。
 
 ### Rate Limit（Redis 後端）
 
@@ -480,6 +491,12 @@ pnpm --filter ./server test:watch      # 後端 watch 模式
 Dockerfile 依 Zeabur 命名慣例置於 **repo 根目錄**（`Dockerfile.<service-name>`）。Zeabur 依每個 service 的 **Service Name** 自動配對到對應 Dockerfile，因此 Zeabur Dashboard 上三個 service 必須命名為 `server` / `worker` / `app`，且 **Root Directory** 欄位保持空白（build context = repo root，Dockerfile 會以 pnpm workspace 方式安裝）。
 
 `server` 與 `worker` 必填 env：`DATABASE_URL`、`REDIS_URL`、`JWT_ACCESS_SECRET`、`JWT_REFRESH_SECRET`、`MASTER_KEY`、`GOOGLE_CLIENT_ID`、`CORS_ORIGIN`、`COOKIE_DOMAIN`、`COOKIE_SECURE=true`。
+
+**Zeabur（或其他 `*.zeabur.app` / 跨子域部署）特別注意**：
+
+- `COOKIE_SAMESITE=none` — `*.zeabur.app` 在 public suffix list 上，前後端被視為跨站，`lax`（預設）無法讓 `/auth/refresh` 的 XHR 帶 cookie，重新整理會直接登出
+- `COOKIE_DOMAIN` 從 env 移除（或設為 `localhost`）— 程式碼 `isLocalhost` 分支跳過 `domain` 屬性，cookie 變 host-only 綁在 API 子網域，這是 PSL 子網域唯一安全的設法
+- `CORS_ORIGIN` 精確列出前端 URL（無結尾 `/`）— `credentials: true` 跟 wildcard `*` 不能共存
 
 `app` build-time env：`VITE_API_BASE_URL`、`VITE_GOOGLE_CLIENT_ID`。
 
