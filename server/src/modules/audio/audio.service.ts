@@ -33,10 +33,16 @@ async function loadTarget(
   if (kind === 'lemma') {
     const card = await prisma.vocabularyCard.findUnique({
       where: { id },
-      select: { id: true, lemma: true, languageCode: true, audioUrl: true },
+      select: { id: true, lemma: true, gender: true, languageCode: true, audioUrl: true },
     })
     if (!card) return null
-    return { id: card.id, text: card.lemma, languageCode: card.languageCode, audioUrl: card.audioUrl }
+    // German nouns: synthesize "<article> <noun>" (e.g. "die Stadt") so the
+    // audio matches what the UI renders (gender + lemma) and reinforces
+    // gender memorization. When the Gender enum extends to fr/pt/es this
+    // mapping needs a (language, gender) → article lookup instead of
+    // toLowerCase().
+    const text = card.gender ? `${card.gender.toLowerCase()} ${card.lemma}` : card.lemma
+    return { id: card.id, text, languageCode: card.languageCode, audioUrl: card.audioUrl }
   }
   const example = await prisma.exampleSentence.findUnique({
     where: { id },
