@@ -16,10 +16,14 @@ export default fp(async (app) => {
     }
 
     if (isResponseSerializationError(error)) {
-      req.log.error({ err: error }, 'Response serialization failed')
+      req.log.error(
+        { err: error, issues: error.cause?.issues },
+        'Response serialization failed',
+      )
       return reply.status(500).send({
         error: 'ResponseSerializationError',
         message: isDev ? error.message : 'Response serialization failed',
+        issues: isDev ? error.cause?.issues : undefined,
       })
     }
 
