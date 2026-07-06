@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { CardDto } from '@/types/domain'
 import { fetchExampleAudio, fetchLemmaAudio } from '@/api/cards.api'
+import { genderArticle } from '@/utils/gender'
 import AudioButton from './AudioButton.vue'
 
 interface Props {
@@ -43,8 +44,11 @@ defineExpose({
         class="flip-card-face flip-card-front rounded-card bg-white shadow-md border border-brand-100 dark:bg-surface-dark-muted dark:border-surface-dark-muted"
       >
         <div class="flip-card-content p-8">
-          <p v-if="card.gender" class="mb-2 text-sm uppercase tracking-wide text-ink-muted">
-            {{ card.gender.toLowerCase() }}
+          <p
+            v-if="genderArticle(card.languageCode, card.gender)"
+            class="mb-2 text-sm uppercase tracking-wide text-ink-muted"
+          >
+            {{ genderArticle(card.languageCode, card.gender) }}
           </p>
           <div class="flex items-center gap-3 wrap-break-word">
             <h2 class="text-4xl font-semibold">{{ card.lemma }}</h2>

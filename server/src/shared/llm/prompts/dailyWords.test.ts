@@ -27,6 +27,38 @@ describe('buildWordItemSchema', () => {
     expect(out.gender).toBe('DER')
   })
 
+  it('strips Portuguese noun article and maps o/a to MASCULINE/FEMININE', () => {
+    const fem = buildWordItemSchema('pt').parse({
+      lemma: 'a palavra',
+      pos: 'NOUN',
+      translation: 'word',
+      sentences: baseSentences,
+    })
+    expect(fem.lemma).toBe('palavra')
+    expect(fem.gender).toBe('FEMININE')
+
+    const masc = buildWordItemSchema('pt').parse({
+      lemma: 'o livro',
+      pos: 'NOUN',
+      translation: 'book',
+      sentences: baseSentences,
+    })
+    expect(masc.lemma).toBe('livro')
+    expect(masc.gender).toBe('MASCULINE')
+  })
+
+  it('keeps an explicit Portuguese gender when the LLM already provided one', () => {
+    const out = buildWordItemSchema('pt').parse({
+      lemma: 'problema',
+      pos: 'NOUN',
+      gender: 'MASCULINE',
+      translation: 'problem',
+      sentences: baseSentences,
+    })
+    expect(out.lemma).toBe('problema')
+    expect(out.gender).toBe('MASCULINE')
+  })
+
   it('does not touch non-noun lemmas even in German', () => {
     const out = buildWordItemSchema('de').parse({
       lemma: 'fahren',

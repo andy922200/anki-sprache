@@ -321,6 +321,8 @@ enum Gender {
   DER
   DIE
   DAS
+  MASCULINE
+  FEMININE
 }
 
 enum FsrsState {

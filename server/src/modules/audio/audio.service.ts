@@ -1,5 +1,5 @@
 import type { Redis } from 'ioredis'
-import type { CEFR, PrismaClient } from '@/generated/prisma/client.js'
+import type { CEFR, Gender, PrismaClient } from '@/generated/prisma/client.js'
 import {
   buildAudioKey,
   deleteAudio,
@@ -15,6 +15,19 @@ export const EXAMPLES_PER_LEVEL_MAX = 3
 const LOCK_TTL_SECONDS = 30
 const LOCK_POLL_INTERVAL_MS = 400
 const LOCK_WAIT_TIMEOUT_MS = 20_000
+
+// The definite article shown/spoken with a lemma. German stores its article as
+// the gender value (der/die/das); Portuguese maps MASCULINE/FEMININE → o/a.
+function genderArticle(languageCode: string, gender: Gender | null): string | null {
+  if (!gender) return null
+  if (languageCode === 'pt') {
+    if (gender === 'MASCULINE') return 'o'
+    if (gender === 'FEMININE') return 'a'
+    return null
+  }
+  if (gender === 'DER' || gender === 'DIE' || gender === 'DAS') return gender.toLowerCase()
+  return null
+}
 
 export type AudioKind = 'lemma' | 'example'
 
@@ -36,12 +49,11 @@ async function loadTarget(
       select: { id: true, lemma: true, gender: true, languageCode: true, audioUrl: true },
     })
     if (!card) return null
-    // German nouns: synthesize "<article> <noun>" (e.g. "die Stadt") so the
-    // audio matches what the UI renders (gender + lemma) and reinforces
-    // gender memorization. When the Gender enum extends to fr/pt/es this
-    // mapping needs a (language, gender) → article lookup instead of
-    // toLowerCase().
-    const text = card.gender ? `${card.gender.toLowerCase()} ${card.lemma}` : card.lemma
+    // Gendered nouns: synthesize "<article> <noun>" (e.g. "die Stadt", "a
+    // palavra") so the audio matches what the UI renders and reinforces gender
+    // memorization.
+    const article = genderArticle(card.languageCode, card.gender)
+    const text = article ? `${article} ${card.lemma}` : card.lemma
     return { id: card.id, text, languageCode: card.languageCode, audioUrl: card.audioUrl }
   }
   const example = await prisma.exampleSentence.findUnique({

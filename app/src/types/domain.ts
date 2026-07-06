@@ -16,7 +16,7 @@ export type PartOfSpeech =
   | 'ARTICLE'
   | 'INTERJECTION'
   | 'NUMERAL'
-export type Gender = 'DER' | 'DIE' | 'DAS'
+export type Gender = 'DER' | 'DIE' | 'DAS' | 'MASCULINE' | 'FEMININE'
 
 export interface LanguageDto {
   code: string

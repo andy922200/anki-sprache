@@ -1,5 +1,9 @@
 import { z } from 'zod'
 
+// Mirrors the Prisma Gender enum. German stores its article as the value;
+// Romance languages store grammatical gender.
+type Gender = 'DER' | 'DIE' | 'DAS' | 'MASCULINE' | 'FEMININE'
+
 // Per-language convention for how an LLM-emitted lemma should look.
 // Adding a new language = appending one entry below; the factory functions
 // below pick the right entry from `targetLanguageCode`.
@@ -7,11 +11,9 @@ type LemmaConvention = {
   // Captures (article, nounBody) from a dictionary form like "die Stadt".
   // null → no article convention; lemma is left untouched.
   articlePattern: RegExp | null
-  // Maps the captured article to a Gender enum value. null → schema has no
-  // column to store this language's gender yet; we still strip the article
-  // from the lemma but leave gender unset. Extending the Gender enum to
-  // FEMININE/MASCULINE/NEUTER is tracked separately and gates fr/pt/es.
-  toGender: ((article: string) => 'DER' | 'DIE' | 'DAS' | null) | null
+  // Maps the captured article to a Gender enum value. null → we still strip the
+  // article from the lemma but leave gender unset (no representable value yet).
+  toGender: ((article: string) => Gender | null) | null
   // Single bullet injected under the prompt's "Rules" section.
   promptRule: string | null
 }
@@ -33,9 +35,18 @@ const LEMMA_CONVENTIONS: Record<string, LemmaConvention> = {
       '  Wrong:   { "lemma": "die Stadt", "pos": "NOUN", "gender": "DIE" }\n' +
       '  Wrong:   { "lemma": "Die Stadt", "pos": "NOUN", "gender": null }',
   },
+  pt: {
+    articlePattern: /^(o|a)\s+(.+)$/i,
+    toGender: (a) => (a.toLowerCase() === 'o' ? 'MASCULINE' : 'FEMININE'),
+    promptRule:
+      'Portuguese nouns: lemma is ONLY the noun itself (lowercase), with NO article. ' +
+      'The gender goes in "gender" as MASCULINE (o) or FEMININE (a).\n' +
+      '  Correct: { "lemma": "palavra", "pos": "NOUN", "gender": "FEMININE" }\n' +
+      '  Wrong:   { "lemma": "a palavra", "pos": "NOUN", "gender": "FEMININE" }',
+  },
   // To enable a new language: append { articlePattern, toGender, promptRule } here.
-  // For Romance languages (fr/pt/es) keep `toGender: null` until the Gender enum
-  // grows MASCULINE/FEMININE values — until then we only strip the article.
+  // Romance languages (fr/es) can mirror `pt`, mapping their article to
+  // MASCULINE/FEMININE.
 }
 
 function getConvention(targetLanguageCode: string): LemmaConvention {
@@ -69,7 +80,7 @@ const baseFields = {
     ])
     .nullable()
     .optional(),
-  gender: z.enum(['DER', 'DIE', 'DAS']).nullable().optional(),
+  gender: z.enum(['DER', 'DIE', 'DAS', 'MASCULINE', 'FEMININE']).nullable().optional(),
   ipa: z.string().max(80).nullable().optional(),
   translation: z.string().min(1).max(200),
   sentences: z
@@ -143,7 +154,7 @@ Return a JSON object with shape:
     {
       "lemma": "string (dictionary form, NO article — see rules)",
       "pos": "NOUN|VERB|ADJECTIVE|ADVERB|PRONOUN|PREPOSITION|CONJUNCTION|ARTICLE|INTERJECTION|NUMERAL",
-      "gender": "DER|DIE|DAS|null (REQUIRED for German nouns, null otherwise)",
+      "gender": "DER|DIE|DAS|MASCULINE|FEMININE|null (see rules — required for nouns in gendered languages, null otherwise)",
       "ipa": "string in /.../ form (phonemic), or null",
       "translation": "translation into ${params.nativeLanguageName}",
       "sentences": [

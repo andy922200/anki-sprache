@@ -12,6 +12,7 @@ import { useUiStore } from '@/stores/ui.store'
 import * as generationApi from '@/api/generation.api'
 import * as cardsApi from '@/api/cards.api'
 import * as llmKeysApi from '@/api/llmKeys.api'
+import { genderArticle } from '@/utils/gender'
 import type { GenerationStatusDto, CardDto, LlmProvider, MaskedKeyDto } from '@/types/domain'
 
 const auth = useAuthStore()
@@ -289,7 +290,9 @@ async function onGenerateMore() {
       <ul class="divide-y divide-brand-100 dark:divide-surface-dark-muted">
         <li v-for="c in todayPreview" :key="c.id" class="py-3 flex justify-between">
           <span class="font-medium">
-            <span v-if="c.gender" class="text-ink-muted mr-1">{{ c.gender.toLowerCase() }}</span>
+            <span v-if="genderArticle(c.languageCode, c.gender)" class="text-ink-muted mr-1">{{
+              genderArticle(c.languageCode, c.gender)
+            }}</span>
             {{ c.lemma }}
           </span>
           <span class="text-ink-muted">{{ c.translation }}</span>

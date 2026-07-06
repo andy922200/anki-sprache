@@ -17,7 +17,7 @@ const PartOfSpeech = z.enum([
   'INTERJECTION',
   'NUMERAL',
 ])
-const Gender = z.enum(['DER', 'DIE', 'DAS'])
+const Gender = z.enum(['DER', 'DIE', 'DAS', 'MASCULINE', 'FEMININE'])
 
 const exampleDto = z.object({
   id: z.string(),
