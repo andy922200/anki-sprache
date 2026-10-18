@@ -19,7 +19,7 @@
 
 ```
 ┌──────────────┐   HTTPS + Cookies    ┌──────────────┐
-│  app (Vue3)  │ ───────────────────▶ │  server (API)│─── Prisma ──▶ Postgres 16
+│  app (Vue3)  │ ───────────────────▶ │  server (API)│─── Prisma ──▶ Postgres 18
 │  Vite SPA    │ ◀─────────────────── │  Fastify 5   │─── ioredis ─▶ Redis 7
 └──────────────┘   JWT + refresh      └──────────────┘                    ▲
                                               │                           │
@@ -30,7 +30,7 @@
                                      └──────────────┘   每使用者當地 04:00 生成）
 ```
 
-部署目標為 **Zeabur**，拆成五個服務：`postgres`（Template）、`redis`（Template）、`server`（Docker）、`worker`（Docker）、`app`（Docker）。
+部署於單台 **AWS Lightsail**（docker compose 跑 `server`、`worker`、`postgres`、`redis`、`cloudflared`），前端放 **Cloudflare Pages**，對外流量經 Cloudflare Tunnel；細節見下方「部署」章節與 `deploy/`。
 
 ### 技術堆疊
 
@@ -38,7 +38,7 @@
 |---|---|
 | Monorepo | pnpm workspaces（`app/` + `server/`），pnpm 10.33.2 |
 | Frontend | Vue 3.5、TypeScript 6、Vite 8（Rolldown）、Tailwind CSS 4、Pinia 3、Vue Router 5、vue-i18n 11、Axios 1.15 |
-| Backend | Fastify 5.8、Prisma 7（Rust-free + driver adapter）、PostgreSQL 16、Redis 7、BullMQ 5、ts-fsrs 5.3、Zod 4、Pino 10、jsonwebtoken 9 |
+| Backend | Fastify 5.8、Prisma 7（Rust-free + driver adapter）、PostgreSQL 18、Redis 7、BullMQ 5、ts-fsrs 5.3、Zod 4、Pino 10、jsonwebtoken 9 |
 | LLM SDKs | `@anthropic-ai/sdk` 0.90、`openai` 6、`@google/generative-ai` 0.24（deprecated，待遷移至 `@google/genai`）、`google-auth-library` 10 |
 | 安全 | `@fastify/helmet`、`@fastify/cors` 11、`@fastify/rate-limit`、`@fastify/cookie`、AES-256-GCM |
 | 風格 / Lint | ESLint 10 + Prettier 3.8（前端）、Biome 2（後端）、EditorConfig |
@@ -75,6 +75,7 @@ anki-sprache/
 │   │       └── plugins/    # auth / prisma / redis / bullmq / errorHandler
 │   └── prisma/             # schema.prisma、seed.ts、migrations/
 ├── docker-compose.yml      # dev 用 postgres + redis
+├── deploy/                 # 正式環境 compose + 每日備份腳本
 ├── pnpm-workspace.yaml
 ├── .env.example / .editorconfig / .prettierrc / .nvmrc
 ├── README.md
@@ -99,7 +100,7 @@ anki-sprache/
 ```bash
 nvm use                           # .nvmrc → 22.22.2（首次須先 nvm install 22.22.2）
 pnpm install                      # 安裝所有 workspace 相依
-pnpm docker:up                    # 啟動 Postgres 16 + Redis 7
+pnpm docker:up                    # 啟動 Postgres 18 + Redis 7
 cp .env.example .env              # 根範本
 cp server/.env.example server/.env
 cp app/.env.example app/.env
@@ -109,6 +110,8 @@ pnpm db:seed                      # 匯入語言種子資料
 ```
 
 > Prisma 7 的 client 產物位於 `server/src/generated/prisma/`（`.gitignore` 已排除）。首次 clone 後必須跑過 `pnpm db:migrate`（或 `pnpm --filter ./server exec prisma generate`），否則 `pnpm dev:server` 會因為找不到產物而失敗。
+
+> 開發用的 Postgres 已由 16 升到 18（與正式環境一致），舊版本的本機 volume 無法沿用。從舊版更新的人請先執行 `docker compose down -v` 清掉舊 volume，再依序跑 `pnpm docker:up`、`pnpm db:migrate`、`pnpm db:seed`（本機資料會重新開始）。
 
 ### 產出秘鑰
 
@@ -478,29 +481,25 @@ pnpm --filter ./server test:watch      # 後端 watch 模式
 - **`@google/generative-ai` 已 deprecated**：官方繼任者為 `@google/genai`，2026-06-24 之後不會再有新版。`server/src/shared/llm/adapters/google.ts` 需另開任務切換 SDK。
 - **Tailwind CSS 4** 已 GA，不再是 beta。
 
-### 部署（Zeabur）
+### 部署（Lightsail + Cloudflare）
 
-| 服務 | 來源 | 對外 |
-|---|---|---|
-| `postgres` | Zeabur Template | `DATABASE_URL` |
-| `redis` | Zeabur Template | `REDIS_URL` |
-| `server` | Docker `Dockerfile.server` | port 3000（公開） |
-| `worker` | Docker `Dockerfile.worker` | 僅內部 |
-| `app` | Docker `Dockerfile.app` | port 8080（公開） |
+步驟與設定請見 `README.md` 的部署章節；本節只記錄改動時要守的規則。
 
-Dockerfile 依 Zeabur 命名慣例置於 **repo 根目錄**（`Dockerfile.<service-name>`）。Zeabur 依每個 service 的 **Service Name** 自動配對到對應 Dockerfile，因此 Zeabur Dashboard 上三個 service 必須命名為 `server` / `worker` / `app`，且 **Root Directory** 欄位保持空白（build context = repo root，Dockerfile 會以 pnpm workspace 方式安裝）。
+| 元件 | 位置 |
+|---|---|
+| `app` | Cloudflare Pages（build：`pnpm --filter ./app build`，輸出 `app/dist`） |
+| `server` / `worker` / `postgres` / `redis` / `cloudflared` | Lightsail VM，`deploy/compose.yml` |
+| 音檔、備份 | Cloudflare R2（兩個獨立 bucket） |
 
-`server` 與 `worker` 必填 env：`DATABASE_URL`、`REDIS_URL`、`JWT_ACCESS_SECRET`、`JWT_REFRESH_SECRET`、`MASTER_KEY`、`GOOGLE_CLIENT_ID`、`CORS_ORIGIN`、`COOKIE_DOMAIN`、`COOKIE_SECURE=true`。
-
-**Zeabur（或其他 `*.zeabur.app` / 跨子域部署）特別注意**：
-
-- `COOKIE_SAMESITE=none` — `*.zeabur.app` 在 public suffix list 上，前後端被視為跨站，`lax`（預設）無法讓 `/auth/refresh` 的 XHR 帶 cookie，重新整理會直接登出
-- `COOKIE_DOMAIN` 從 env 移除（或設為 `localhost`）— 程式碼 `isLocalhost` 分支跳過 `domain` 屬性，cookie 變 host-only 綁在 API 子網域，這是 PSL 子網域唯一安全的設法
-- `CORS_ORIGIN` 精確列出前端 URL（無結尾 `/`）— `credentials: true` 跟 wildcard `*` 不能共存
-
-`app` build-time env：`VITE_API_BASE_URL`、`VITE_GOOGLE_CLIENT_ID`。
-
-`server` 容器啟動時會自動跑 `prisma migrate deploy` 與 `prisma/seed.ts`；seed 內有 `Language` 表 count 守衛，只會在全新 DB 插入種子資料，既有資料不會被覆寫。
+- 對外流量只經 Cloudflare Tunnel；`deploy/compose.yml` **不得**新增 `ports:`。
+- Postgres 主版本需與匯出端一致（目前 18）；volume 掛在 `/var/lib/postgresql`（PG 18 映像的資料目錄在其下的版本子目錄）。
+- `Dockerfile.server` / `Dockerfile.worker` 的 `prisma generate` 需帶佔位的 `DATABASE_URL`（`prisma.config.ts` 載入時就要求該變數），否則在沒有注入環境變數的建置環境會失敗。
+- `server` 與 `worker` 必填 env：`DATABASE_URL`、`REDIS_URL`、`JWT_ACCESS_SECRET`、`JWT_REFRESH_SECRET`、`MASTER_KEY`、`GOOGLE_CLIENT_ID`、`CORS_ORIGIN`、`COOKIE_DOMAIN`、`COOKIE_SECURE=true`。`MASTER_KEY` 更換會讓既有的 `LlmApiKey` 無法解密。
+- `CORS_ORIGIN` 精確列出前端 URL（無結尾 `/`）— `credentials: true` 跟 wildcard `*` 不能共存。
+- 前後端同站（如 `anki.example.com` ↔ `anki-api.example.com`）：`COOKIE_SAMESITE=lax`，`COOKIE_DOMAIN` 設為 API 主機名稱。
+- 前後端跨站（如兩個 `*.zeabur.app` 子網域，因 public suffix list 而被視為跨站）：`COOKIE_SAMESITE=none`，並從 env 移除 `COOKIE_DOMAIN`（或設為 `localhost`）讓 cookie 變 host-only，詳見 § E「Cookie 策略」。
+- `app` build-time env：`VITE_API_BASE_URL`、`VITE_GOOGLE_CLIENT_ID`。
+- `server` 容器啟動時會自動跑 `prisma migrate deploy` 與 `prisma/seed.ts`；seed 內有 `Language` 表 count 守衛，只會在全新 DB 插入種子資料，既有資料不會被覆寫。
 
 ---
 

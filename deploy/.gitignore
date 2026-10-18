@@ -1,0 +1,4 @@
+.env
+app.env
+backup.env
+backup.log
