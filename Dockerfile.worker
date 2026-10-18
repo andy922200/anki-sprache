@@ -16,7 +16,8 @@ COPY --from=deps /repo/node_modules ./node_modules
 COPY --from=deps /repo/server/node_modules ./server/node_modules
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY server ./server
-RUN cd server && pnpm prisma generate && pnpm build
+# prisma.config.ts 載入時要求 DATABASE_URL；generate 不連線，給佔位值即可
+RUN cd server && DATABASE_URL=postgresql://build:build@localhost:5432/build pnpm prisma generate && pnpm build
 
 # Preserve the full pnpm workspace layout so that symlinks under
 # server/node_modules (including @prisma/client → .prisma/client) resolve
