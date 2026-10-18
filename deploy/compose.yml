@@ -1,0 +1,88 @@
+# anki-sprache production stack (single VM, docker compose).
+# Run from this directory: `docker compose up -d --build`
+#
+# Secrets live in two files next to this one (both gitignored):
+#   .env     -> values interpolated into this file (POSTGRES_PASSWORD, TUNNEL_TOKEN)
+#   app.env  -> runtime env for server / worker (copy from app.env.example)
+#
+# No service publishes `ports:`. The only way in from the internet is
+# Cloudflare Tunnel -> http://server:3000 on the internal compose network.
+
+name: anki
+
+x-app: &app
+  env_file: app.env
+  restart: unless-stopped
+  environment: &app-env
+    NODE_ENV: production
+    DATABASE_URL: postgresql://anki:${POSTGRES_PASSWORD}@postgres:5432/anki_sprache?schema=public&connection_limit=5
+    REDIS_URL: redis://redis:6379
+    NODE_OPTIONS: --max-old-space-size=256
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    # Matches Zeabur's server version (18.x). Postgres 18 images keep data under
+    # /var/lib/postgresql/18/..., so the volume mounts the parent directory.
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: anki
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: anki_sprache
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U anki -d anki_sprache']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 384m
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # BullMQ requires noeviction, otherwise queued jobs can silently disappear.
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory', '96mb', '--maxmemory-policy', 'noeviction']
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 128m
+
+  server:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: Dockerfile.server
+    image: anki-server:local
+    mem_limit: 384m
+
+  worker:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: Dockerfile.worker
+    image: anki-worker:local
+    mem_limit: 384m
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    depends_on:
+      - server
+    mem_limit: 64m
+
+volumes:
+  pgdata:
+  redisdata:
