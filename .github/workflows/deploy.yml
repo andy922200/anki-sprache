@@ -71,6 +71,9 @@ jobs:
             StrictHostKeyChecking accept-new
             ProxyCommand cloudflared access ssh --hostname %h --id ${{ secrets.CF_ACCESS_CLIENT_ID }} --secret ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
           CFG
+      - uses: actions/checkout@v4
+      - name: Sync compose.yml
+        run: scp deploy/compose.yml anki-deploy:~/deploy/compose.yml
       - name: Pull and restart
         run: ssh anki-deploy 'cd ~/deploy && docker compose pull server worker && docker compose up -d && docker image prune -f'
       - name: Health check

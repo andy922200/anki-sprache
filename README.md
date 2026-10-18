@@ -206,7 +206,7 @@ anki-sprache/
 
 ### 自動佈署（GitHub Actions）
 
-推到 `master` 且動到後端相關檔案時，[`deploy.yml`](./.github/workflows/deploy.yml) 會把 `server`、`worker` 映像 build 後推到 GHCR，再經 Cloudflare Tunnel SSH 進 VM 執行 `docker compose pull && up -d`，最後打 `/health` 確認。VM 上只需要 `deploy/` 資料夾（compose 與 env 檔），不需要 clone 原始碼。
+推到 `master` 且動到後端相關檔案時，[`deploy.yml`](./.github/workflows/deploy.yml) 會把 `server`、`worker` 映像 build 後推到 GHCR，再經 Cloudflare Tunnel SSH 進 VM 執行 `docker compose pull && up -d`，最後打 `/health` 確認。每次佈署前會先把 `deploy/compose.yml` 複製到 VM 的 `~/deploy/`（覆蓋原檔），所以 compose 以 repo 為準；`.env`、`app.env`、`backup.env` 不同步，維持只存在 VM。VM 上不需要 clone 原始碼。
 
 一次性設定：
 
