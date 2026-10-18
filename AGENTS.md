@@ -19,7 +19,7 @@
 
 ```
 ┌──────────────┐   HTTPS + Cookies    ┌──────────────┐
-│  app (Vue3)  │ ───────────────────▶ │  server (API)│─── Prisma ──▶ Postgres 16
+│  app (Vue3)  │ ───────────────────▶ │  server (API)│─── Prisma ──▶ Postgres 18
 │  Vite SPA    │ ◀─────────────────── │  Fastify 5   │─── ioredis ─▶ Redis 7
 └──────────────┘   JWT + refresh      └──────────────┘                    ▲
                                               │                           │
@@ -38,7 +38,7 @@
 |---|---|
 | Monorepo | pnpm workspaces（`app/` + `server/`），pnpm 10.33.2 |
 | Frontend | Vue 3.5、TypeScript 6、Vite 8（Rolldown）、Tailwind CSS 4、Pinia 3、Vue Router 5、vue-i18n 11、Axios 1.15 |
-| Backend | Fastify 5.8、Prisma 7（Rust-free + driver adapter）、PostgreSQL 16、Redis 7、BullMQ 5、ts-fsrs 5.3、Zod 4、Pino 10、jsonwebtoken 9 |
+| Backend | Fastify 5.8、Prisma 7（Rust-free + driver adapter）、PostgreSQL 18、Redis 7、BullMQ 5、ts-fsrs 5.3、Zod 4、Pino 10、jsonwebtoken 9 |
 | LLM SDKs | `@anthropic-ai/sdk` 0.90、`openai` 6、`@google/generative-ai` 0.24（deprecated，待遷移至 `@google/genai`）、`google-auth-library` 10 |
 | 安全 | `@fastify/helmet`、`@fastify/cors` 11、`@fastify/rate-limit`、`@fastify/cookie`、AES-256-GCM |
 | 風格 / Lint | ESLint 10 + Prettier 3.8（前端）、Biome 2（後端）、EditorConfig |
@@ -100,7 +100,7 @@ anki-sprache/
 ```bash
 nvm use                           # .nvmrc → 22.22.2（首次須先 nvm install 22.22.2）
 pnpm install                      # 安裝所有 workspace 相依
-pnpm docker:up                    # 啟動 Postgres 16 + Redis 7
+pnpm docker:up                    # 啟動 Postgres 18 + Redis 7
 cp .env.example .env              # 根範本
 cp server/.env.example server/.env
 cp app/.env.example app/.env
@@ -110,6 +110,8 @@ pnpm db:seed                      # 匯入語言種子資料
 ```
 
 > Prisma 7 的 client 產物位於 `server/src/generated/prisma/`（`.gitignore` 已排除）。首次 clone 後必須跑過 `pnpm db:migrate`（或 `pnpm --filter ./server exec prisma generate`），否則 `pnpm dev:server` 會因為找不到產物而失敗。
+
+> 開發用的 Postgres 已由 16 升到 18（與正式環境一致），舊版本的本機 volume 無法沿用。從舊版更新的人請先執行 `docker compose down -v` 清掉舊 volume，再依序跑 `pnpm docker:up`、`pnpm db:migrate`、`pnpm db:seed`（本機資料會重新開始）。
 
 ### 產出秘鑰
 

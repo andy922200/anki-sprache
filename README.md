@@ -23,7 +23,7 @@
 |------|------|
 | Monorepo | pnpm 10 workspaces（`app/` + `server/`） |
 | 前端 | Vue 3.5 · TypeScript 6 · Vite 8（Rolldown）· Tailwind CSS 4 · Pinia 3 · Vue Router 5 · vue-i18n 11 |
-| 後端 | Fastify 5.8（ESM）· Prisma 7（Rust-free + driver adapter）· PostgreSQL 16 · Redis 7 · BullMQ · ts-fsrs 5 · Zod 4 · Pino 10 |
+| 後端 | Fastify 5.8（ESM）· Prisma 7（Rust-free + driver adapter）· PostgreSQL 18 · Redis 7 · BullMQ · ts-fsrs 5 · Zod 4 · Pino 10 |
 | LLM | `@anthropic-ai/sdk` · `openai` · `@google/generative-ai`（已 deprecated，將遷移至 `@google/genai`） |
 | 安全 | `@fastify/helmet` · `@fastify/cors` · `@fastify/rate-limit` · AES-256-GCM |
 | 風格 / Lint | ESLint 10 + Prettier 3.8（前端） · Biome 2（後端，lint+format 一站式） |
@@ -36,7 +36,7 @@
 
 ```
 ┌──────────────┐   HTTPS + Cookies    ┌──────────────┐
-│  app (Vue3)  │ ───────────────────▶ │  server (API)│─── Prisma ──▶ Postgres 16
+│  app (Vue3)  │ ───────────────────▶ │  server (API)│─── Prisma ──▶ Postgres 18
 │  Vite SPA    │ ◀─────────────────── │  Fastify 5   │─── ioredis ─▶ Redis 7
 └──────────────┘   JWT + refresh      └──────────────┘                    ▲
                                               │                           │
@@ -88,6 +88,8 @@ pnpm db:seed       # 匯入語言種子資料
 ```
 
 > Prisma 7 的 client 產物位於 `server/src/generated/prisma/`（已 gitignore）。第一次 clone 後必須跑過 `pnpm db:migrate`（或 `pnpm --filter ./server exec prisma generate`），否則 `pnpm dev:server` 會找不到 client。
+
+> 開發用的 Postgres 已由 16 升到 18（與正式環境一致），舊版本的本機 volume 無法沿用。從舊版更新的人請先執行 `docker compose down -v` 清掉舊 volume，再依序跑 `pnpm docker:up`、`pnpm db:migrate`、`pnpm db:seed`（本機資料會重新開始）。
 
 ### 啟動開發環境
 
