@@ -184,7 +184,7 @@ anki-sprache/
 | 元件 | 位置 | 備註 |
 |------|------|------|
 | `app` | Cloudflare Pages | 見「前端」 |
-| `server` / `worker` / `postgres` / `redis` / `cloudflared` | Lightsail VM，[`deploy/compose.yml`](./deploy/compose.yml) | 沒有任何 `ports:`，唯一入口是 Tunnel |
+| `server` / `worker` / `postgres` / `redis` / `cloudflared` | Lightsail VM，[`deploy/compose.yml`](./deploy/compose.yml) | 沒有任何 `ports:`，唯一入口是 Tunnel；映像來自 GHCR |
 | TTS 音檔 | Cloudflare R2 | 與主機無關 |
 | 備份 | Cloudflare R2（另一個 bucket） | [`deploy/backup.sh`](./deploy/backup.sh) |
 
@@ -198,11 +198,23 @@ anki-sprache/
    ```bash
    git clone https://github.com/andy922200/anki-sprache.git && cd anki-sprache/deploy
    cp .env.example .env && cp app.env.example app.env   # 填入實際值，並 chmod 600
-   docker compose up -d --build
+   docker compose pull && docker compose up -d
    curl https://anki-api.example.com/health
    ```
 
 `server` 啟動時會自動執行 `prisma migrate deploy` 與種子腳本（`Language` 表非空時略過）。`app.env` 的變數請見 [`deploy/app.env.example`](./deploy/app.env.example)。前端與 API 位於同一個網站（`anki.example.com` 與 `anki-api.example.com`）底下，因此使用 `COOKIE_SAMESITE=lax`，`COOKIE_DOMAIN` 設為 API 主機名稱即可。
+
+### 自動佈署（GitHub Actions）
+
+推到 `master` 且動到後端相關檔案時，[`deploy.yml`](./.github/workflows/deploy.yml) 會把 `server`、`worker` 映像 build 後推到 GHCR，再經 Cloudflare Tunnel SSH 進 VM 執行 `docker compose pull && up -d`，最後打 `/health` 確認。VM 上只需要 `deploy/` 資料夾（compose 與 env 檔），不需要 clone 原始碼。
+
+一次性設定：
+
+1. GHCR 第一次推送後，到 GitHub 的 Packages 把 `anki-server`、`anki-worker` 設為 Public（映像不含任何 secret），VM 才能免登入 `pull`。
+2. Tunnel 新增 Public Hostname，例如 `ssh.example.com` → `ssh://host.docker.internal:22`（`compose.yml` 的 `cloudflared` 已加 `extra_hosts`）。
+3. Zero Trust → Access 建立 Service Token，並對 `ssh.example.com` 建立 Self-hosted application，policy 的 Action 選 `Service Auth` 並指定該 token。
+4. 產生專用金鑰 `ssh-keygen -t ed25519 -f deploy_key -N ""`，公鑰加入 VM 的 `~/.ssh/authorized_keys`。
+5. 在 repo 的 Settings → Secrets and variables → Actions 新增：`DEPLOY_SSH_KEY`（私鑰內容）、`DEPLOY_SSH_HOST`（`ssh.example.com`）、`DEPLOY_SSH_USER`、`CF_ACCESS_CLIENT_ID`、`CF_ACCESS_CLIENT_SECRET`。
 
 ### 前端（Cloudflare Pages）
 
@@ -221,7 +233,7 @@ Custom domain 設為 `anki.example.com`，並將它加入 Google OAuth 的 Autho
 `deploy/backup.sh` 以 `pg_dump -Fc` 匯出並上傳到 R2，建議用 cron 每天執行（VM 時區為 UTC）：
 
 ```
-0 19 * * * /home/ubuntu/anki-sprache/deploy/backup.sh >> /home/ubuntu/anki-sprache/deploy/backup.log 2>&1
+0 19 * * * /home/ubuntu/deploy/backup.sh >> /home/ubuntu/deploy/backup.log 2>&1
 ```
 
 憑證放在 `deploy/backup.env`（見 `backup.env.example`）。請使用只能存取備份 bucket 的 R2 token，並在 bucket 設定生命週期規則（例如 30 天後刪除）。還原時，`pg_restore` 所屬的 Postgres 主版本不可低於匯出端：

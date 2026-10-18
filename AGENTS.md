@@ -488,7 +488,7 @@ pnpm --filter ./server test:watch      # 後端 watch 模式
 | 元件 | 位置 |
 |---|---|
 | `app` | Cloudflare Pages（build：`pnpm --filter ./app build`，輸出 `app/dist`） |
-| `server` / `worker` / `postgres` / `redis` / `cloudflared` | Lightsail VM，`deploy/compose.yml` |
+| `server` / `worker` / `postgres` / `redis` / `cloudflared` | Lightsail VM，`deploy/compose.yml`（`server`/`worker` 映像由 `.github/workflows/deploy.yml` 推到 GHCR 並自動佈署） |
 | 音檔、備份 | Cloudflare R2（兩個獨立 bucket） |
 
 - 對外流量只經 Cloudflare Tunnel；`deploy/compose.yml` **不得**新增 `ports:`。
