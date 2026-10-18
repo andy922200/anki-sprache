@@ -1,5 +1,5 @@
 # anki-sprache production stack (single VM, docker compose).
-# Run from this directory: `docker compose up -d --build`
+# Run from this directory: `docker compose pull && docker compose up -d`
 #
 # Secrets live in two files next to this one (both gitignored):
 #   .env     -> values interpolated into this file (POSTGRES_PASSWORD, TUNNEL_TOKEN)
@@ -59,22 +59,19 @@ services:
 
   server:
     <<: *app
-    build:
-      context: ..
-      dockerfile: Dockerfile.server
-    image: anki-server:local
+    image: ghcr.io/andy922200/anki-server:latest
     mem_limit: 384m
 
   worker:
     <<: *app
-    build:
-      context: ..
-      dockerfile: Dockerfile.worker
-    image: anki-worker:local
+    image: ghcr.io/andy922200/anki-worker:latest
     mem_limit: 384m
 
   cloudflared:
     image: cloudflare/cloudflared:latest
+    # Lets the tunnel reach the host's sshd (route: ssh://host.docker.internal:22).
+    extra_hosts:
+      - host.docker.internal:host-gateway
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:
