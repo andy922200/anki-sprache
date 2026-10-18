@@ -28,7 +28,7 @@
 | 安全 | `@fastify/helmet` · `@fastify/cors` · `@fastify/rate-limit` · AES-256-GCM |
 | 風格 / Lint | ESLint 10 + Prettier 3.8（前端） · Biome 2（後端，lint+format 一站式） |
 | 測試 | Vitest 4 · happy-dom 20（前端） |
-| 部署 | Zeabur（Docker-based） |
+| 部署 | AWS Lightsail（docker compose）+ Cloudflare（Tunnel / Pages / R2） |
 
 ---
 
@@ -146,6 +146,7 @@ anki-sprache/
 │   │   └── shared/       # crypto · fsrs · llm · plugins
 │   └── prisma/           # schema.prisma · migrations · seed.ts
 ├── docker-compose.yml    # dev 用 postgres + redis
+├── deploy/               # 正式環境 compose + 每日備份腳本
 ├── AGENTS.md             # 工程與 AI 協作單一事實來源
 └── CLAUDE.md             # 參照 AGENTS.md
 ```
@@ -163,25 +164,75 @@ anki-sprache/
 
 ---
 
-## ☁️ 部署（Zeabur）
+## ☁️ 部署（Lightsail + Cloudflare）
 
-以 Zeabur 作為部署目標，同一個 project 建 5 個 services：
+單台 AWS Lightsail（2GB）以 docker compose 跑後端，前端放 Cloudflare Pages，對外流量全走 Cloudflare Tunnel，VM 不開 80 / 443。
 
-| 服務 | 來源 | 對外 |
+```
+瀏覽器 ──▶ Cloudflare ──▶ Pages（app）                          anki.example.com
+              │
+              └─ Tunnel ──▶ Lightsail VM（deploy/compose.yml）   anki-api.example.com
+                              ├─ server      Fastify（:3000，僅內部網路）
+                              ├─ worker      BullMQ
+                              ├─ postgres    18
+                              ├─ redis       7（noeviction）
+                              └─ cloudflared
+```
+
+| 元件 | 位置 | 備註 |
 |------|------|------|
-| `postgres` | Zeabur Marketplace | 內部（提供 `DATABASE_URL`） |
-| `redis` | Zeabur Marketplace | 內部（提供 `REDIS_URL`） |
-| `server` | Docker（`Dockerfile.server`） | port 3000 |
-| `worker` | Docker（`Dockerfile.worker`） | 僅內部 |
-| `app` | Docker（`Dockerfile.app`，nginx serve 靜態檔） | port 8080 |
+| `app` | Cloudflare Pages | 見「前端」 |
+| `server` / `worker` / `postgres` / `redis` / `cloudflared` | Lightsail VM，[`deploy/compose.yml`](./deploy/compose.yml) | 沒有任何 `ports:`，唯一入口是 Tunnel |
+| TTS 音檔 | Cloudflare R2 | 與主機無關 |
+| 備份 | Cloudflare R2（另一個 bucket） | [`deploy/backup.sh`](./deploy/backup.sh) |
 
-> Dockerfile 依 Zeabur 命名慣例放在 repo 根目錄（`Dockerfile.<service-name>`），請將 Zeabur 上三個 service 的名稱分別設為 `server` / `worker` / `app`，平台會自動配對到對應 Dockerfile。Root Directory 欄位保持空白（＝ repo root）。
+### 後端（VM）
 
-**server / worker 必填 env**：`DATABASE_URL`、`REDIS_URL`、`JWT_ACCESS_SECRET`、`JWT_REFRESH_SECRET`、`MASTER_KEY`、`GOOGLE_CLIENT_ID`、`CORS_ORIGIN`、`COOKIE_DOMAIN`、`COOKIE_SECURE=true`
+1. 建立 Lightsail 執行個體（Ubuntu 24.04、2GB、Dual-stack），掛上 Static IP；防火牆只保留 SSH（22）。
+2. 安裝 Docker，並加 2GB swap。
+3. 在 Cloudflare Zero Trust 建立 Tunnel，Public Hostname 設為 `anki-api.example.com` → `http://server:3000`。子網域只能一層，免費的 Universal SSL 才涵蓋。
+4. 在 VM 上執行：
 
-**app 的 build-time env**（Zeabur **Build Arguments** 區塊，不是 runtime env）：`VITE_API_BASE_URL`、`VITE_GOOGLE_CLIENT_ID`
+   ```bash
+   git clone https://github.com/andy922200/anki-sprache.git && cd anki-sprache/deploy
+   cp .env.example .env && cp app.env.example app.env   # 填入實際值，並 chmod 600
+   docker compose up -d --build
+   curl https://anki-api.example.com/health
+   ```
 
-> `server` 容器啟動時會自動跑 `prisma migrate deploy` 與種子資料腳本；`prisma/seed.ts` 內有「Language 表為空才寫入」的守衛，既有資料不會被覆寫。
+`server` 啟動時會自動執行 `prisma migrate deploy` 與種子腳本（`Language` 表非空時略過）。`app.env` 的變數請見 [`deploy/app.env.example`](./deploy/app.env.example)。前端與 API 位於同一個網站（`anki.example.com` 與 `anki-api.example.com`）底下，因此使用 `COOKIE_SAMESITE=lax`，`COOKIE_DOMAIN` 設為 API 主機名稱即可。
+
+### 前端（Cloudflare Pages）
+
+匯入此 repo 建立 **Pages** 專案（不是 Workers）：
+
+| 設定 | 值 |
+|------|-----|
+| Build command | `pnpm --filter ./app build` |
+| Build output directory | `app/dist` |
+| 環境變數 | `VITE_API_BASE_URL=https://anki-api.example.com`、`VITE_GOOGLE_CLIENT_ID`、`NODE_VERSION=22`、`PNPM_VERSION=10.33.2` |
+
+Custom domain 設為 `anki.example.com`，並將它加入 Google OAuth 的 Authorized JavaScript origins。`Dockerfile.app`（nginx）仍保留，可用於不走 Pages 的情況。
+
+### 備份與還原
+
+`deploy/backup.sh` 以 `pg_dump -Fc` 匯出並上傳到 R2，建議用 cron 每天執行（VM 時區為 UTC）：
+
+```
+0 19 * * * /home/ubuntu/anki-sprache/deploy/backup.sh >> /home/ubuntu/anki-sprache/deploy/backup.log 2>&1
+```
+
+憑證放在 `deploy/backup.env`（見 `backup.env.example`）。請使用只能存取備份 bucket 的 R2 token，並在 bucket 設定生命週期規則（例如 30 天後刪除）。還原時，`pg_restore` 所屬的 Postgres 主版本不可低於匯出端：
+
+```bash
+docker compose exec -T postgres pg_restore -U anki -d anki_sprache --clean --if-exists --no-owner --no-privileges < anki.dump
+```
+
+### 注意事項
+
+- `MASTER_KEY` 一旦更換，所有已儲存的使用者 LLM API Key 都會無法解密，搬遷時務必沿用原值。
+- Google TTS 的 API key 若有設定 IP 限制，需加入 VM 的 Static IP。
+- Postgres 18 的映像把資料放在 `/var/lib/postgresql/18/...`，所以 compose 的 volume 掛在 `/var/lib/postgresql`，而不是 `/var/lib/postgresql/data`。
 
 ---
 
