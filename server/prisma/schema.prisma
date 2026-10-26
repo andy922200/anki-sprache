@@ -68,6 +68,7 @@ model UserSettings {
   nativeLanguageCode   String        @default("en")
   cefrLevel            CEFR          @default(A1)
   dailyNewCount        Int           @default(5)
+  maxDueCards          Int           @default(50)
   preferredLlmProvider LlmProvider?
   preferredLlmModel    String?
   theme                Theme         @default(SYSTEM)
