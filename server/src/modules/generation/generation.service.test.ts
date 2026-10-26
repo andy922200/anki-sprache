@@ -34,7 +34,7 @@ const { generateForUser, generateAdditionalForUser, NoNewWordsError } = await im
 // Lemmas that already exist as cards, and the id they resolve to.
 const EXISTING: Record<string, string> = { bom: 'removed-bom', livro: 'learned' }
 
-function setup(pool: string[] = []) {
+function setup(pool: string[] = [], recentlyRejected: string[] = []) {
   prompts.length = 0
   const usage: { success: boolean }[] = []
   const logged: { cardIds: string[] }[] = []
@@ -88,7 +88,14 @@ function setup(pool: string[] = []) {
     },
     $transaction: vi.fn(async (cb: (t: typeof tx) => Promise<void>) => cb(tx)),
   }
-  const redis = { set: vi.fn(async () => 'OK'), del: vi.fn(), keys: vi.fn(async () => []) }
+  const redis = {
+    set: vi.fn(async () => 'OK'),
+    del: vi.fn(),
+    keys: vi.fn(async () => []),
+    smembers: vi.fn(async () => recentlyRejected),
+    sadd: vi.fn(),
+    expire: vi.fn(),
+  }
   const db = prisma as unknown as PrismaClient
   const cache = redis as unknown as Redis
   const generationDate = new Date('2026-10-26T00:00:00.000Z')
@@ -96,6 +103,7 @@ function setup(pool: string[] = []) {
     prisma,
     usage,
     logged,
+    redis,
     daily: (excludeCardIds?: string[]) =>
       generateForUser(db, cache, { userId: 'u1', generationDate, excludeCardIds }),
     additional: (count: number) =>
@@ -128,6 +136,14 @@ describe('generateForUser', () => {
     expect(prompts[1]!.user).toContain('Produce exactly 1 ')
     expect(prompts[1]!.user).toContain('Avoid these lemmas: livro')
     expect(result.cardIds).toEqual(['new-casa', 'new-sol'])
+  })
+
+  it('tells the LLM up front to skip lemmas recently turned down for this user', async () => {
+    script = [['casa', 'sol']]
+    const { daily } = setup([], ['livro', 'comer'])
+    await daily()
+
+    expect(prompts[0]!.user).toContain('Avoid these lemmas: livro, comer')
   })
 
   it('never re-picks dropped cards after a forced regenerate, even if the LLM returns them', async () => {
@@ -163,6 +179,26 @@ describe('generateForUser', () => {
 
     expect(result.cardIds).toEqual(['new-casa'])
     expect(usage.map((u) => u.success)).toEqual([true, false])
+  })
+
+  it('reports the rejected lemmas when the deck still comes up short', async () => {
+    script = [['livro', 'casa'], ['livro']]
+    const { daily, redis } = setup()
+    const result = await daily()
+
+    expect(result.cardIds).toEqual(['new-casa'])
+    expect(result.rejectedLemmas).toEqual(['livro'])
+    expect(result.short).toBe(true)
+    expect(redis.sadd).toHaveBeenCalledWith('gen:rejected-lemmas:u1', 'livro')
+  })
+
+  it('reports no rejected lemmas when the deck is full', async () => {
+    script = [['livro', 'casa'], ['sol']]
+    const { daily } = setup()
+
+    const result = await daily()
+    expect(result.rejectedLemmas).toEqual([])
+    expect(result.short).toBe(false)
   })
 
   it('fails with the rejected lemmas, and logs no deck, when every suggestion is already known', async () => {

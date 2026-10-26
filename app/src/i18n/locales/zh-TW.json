@@ -56,7 +56,12 @@
     "generateMore": "追加 {count} 個新字",
     "generateMoreQueued": "正在產生更多單字…",
     "noNewWordsRetry": "LLM 這次提供的單字你都已經學過了：{words}\n\n要再試一次嗎？",
-    "noNewWordsEmptyRetry": "LLM 這次沒有提供可用的新單字。\n\n要再試一次嗎？"
+    "noNewWordsEmptyRetry": "LLM 這次沒有提供可用的新單字。\n\n要再試一次嗎？",
+    "shortfallRetry": "這次只湊到 {got} 個新單字（目標 {target} 個）。\nLLM 另外提供的單字你都已經學過了：{words}\n\n要再試一次補足嗎？（今天還可補足 {left} 次）",
+    "shortfallEmptyRetry": "這次只湊到 {got} 個新單字（目標 {target} 個）。\n\n要再試一次補足嗎？（今天還可補足 {left} 次）",
+    "shortfallLimitReached": "今天補足的次數已用完，牌組先維持 {got} 個新單字。明天會自動重新產生；若常常湊不滿，可到設定調高 CEFR 等級。",
+    "levelHint": "最近幾次都湊不滿今日的新單字，這個等級的常用字你可能已經學得差不多了。可以到設定調高 CEFR 等級。",
+    "levelHintAction": "前往設定"
   },
   "review": {
     "remaining": "還剩 {count} 張",

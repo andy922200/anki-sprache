@@ -30,7 +30,13 @@ async function setup(opts: { provider: string | null; hasKey: boolean }) {
     userCardState: { deleteMany: vi.fn(async () => ({ count: 2 })) },
     $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
   }
-  const redis = { keys: vi.fn(async () => []), del: vi.fn() }
+  const redis = {
+    keys: vi.fn(async () => []),
+    get: vi.fn(async (_key: string): Promise<string | null> => null),
+    del: vi.fn(),
+    incr: vi.fn(async () => 1),
+    expire: vi.fn(),
+  }
   const queues = { userGeneration: { add: vi.fn(async () => ({ id: 'job1' })) } }
 
   const app = Fastify()
@@ -96,6 +102,37 @@ describe('POST /generate/today without force', () => {
     expect(res.statusCode).toBe(200)
     expect(res.json()).toMatchObject({ status: 'already-done', cardIds: ['c1', 'c2'] })
     expect(prisma.$transaction).not.toHaveBeenCalled()
+    expect(queues.userGeneration.add).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /generate/more with fillShortfall', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const post = (app: Awaited<ReturnType<typeof setup>>['app']) =>
+    app.inject({
+      method: 'POST',
+      url: '/generate/more',
+      payload: { count: 2, fillShortfall: true },
+    })
+
+  it('queues the top-up and counts it against the day', async () => {
+    const { app, redis, queues } = await setup({ provider: 'GOOGLE', hasKey: true })
+    const res = await post(app)
+
+    expect(res.statusCode).toBe(202)
+    expect(redis.incr).toHaveBeenCalledTimes(1)
+    expect(queues.userGeneration.add).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses once the daily top-ups are used up', async () => {
+    const { app, redis, queues } = await setup({ provider: 'GOOGLE', hasKey: true })
+    redis.get.mockImplementation(async (key: string) =>
+      key.startsWith('gen:top-ups:') ? '3' : null,
+    )
+    const res = await post(app)
+
+    expect(res.statusCode).toBe(409)
     expect(queues.userGeneration.add).not.toHaveBeenCalled()
   })
 })

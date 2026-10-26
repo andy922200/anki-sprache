@@ -56,7 +56,12 @@
     "generateMore": "Generate {count} more",
     "generateMoreQueued": "Generating more words…",
     "noNewWordsRetry": "The LLM only suggested words you already have: {words}\n\nTry again?",
-    "noNewWordsEmptyRetry": "The LLM didn't suggest any usable new words.\n\nTry again?"
+    "noNewWordsEmptyRetry": "The LLM didn't suggest any usable new words.\n\nTry again?",
+    "shortfallRetry": "Only {got} of {target} new words this time.\nThe LLM also suggested words you already have: {words}\n\nTry again to fill the rest? ({left} left today)",
+    "shortfallEmptyRetry": "Only {got} of {target} new words this time.\n\nTry again to fill the rest? ({left} left today)",
+    "shortfallLimitReached": "No top-ups left today, so the deck stays at {got} new words. Tomorrow's deck is generated automatically; if this keeps happening, raise your CEFR level in Settings.",
+    "levelHint": "Your last few decks came up short — you may have covered most common words at this level. Consider raising your CEFR level in Settings.",
+    "levelHintAction": "Open Settings"
   },
   "review": {
     "remaining": "{count} remaining",

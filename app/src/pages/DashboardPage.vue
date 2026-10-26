@@ -93,6 +93,26 @@ function confirmRetryNoNewWords(words: string[]): boolean {
   )
 }
 
+interface Shortfall {
+  got: number
+  target: number
+  words: string[]
+  topUpsLeft: number
+}
+
+// Hitting the daily cap is final: the deck stays short instead of asking again.
+function confirmTopUp({ got, target, words, topUpsLeft }: Shortfall): boolean {
+  if (topUpsLeft === 0) {
+    ui.toast('info', t('dashboard.shortfallLimitReached', { got }))
+    return false
+  }
+  return window.confirm(
+    words.length
+      ? t('dashboard.shortfallRetry', { got, target, words: words.join(', '), left: topUpsLeft })
+      : t('dashboard.shortfallEmptyRetry', { got, target, left: topUpsLeft }),
+  )
+}
+
 async function onGenerate(force = false) {
   if (force) {
     const ok = window.confirm(
@@ -102,6 +122,7 @@ async function onGenerate(force = false) {
   }
   busy.value = true
   let alreadyHadWords: string[] | null = null
+  let shortfall: Shortfall | null = null
   ui.beginBusy(t(force ? 'generation.regenerating' : 'generation.generating'))
   try {
     const res = await generationApi.generateToday({ force })
@@ -123,6 +144,15 @@ async function onGenerate(force = false) {
       }
       if (finalStatus?.done) {
         ui.toast('success', t('dashboard.generated', { count: finalStatus.cardIds.length }))
+        const target = settings.settings?.dailyNewCount ?? 0
+        if (finalStatus.cardIds.length < target) {
+          shortfall = {
+            got: finalStatus.cardIds.length,
+            target,
+            words: parseNoNewWords(finalStatus.lastError) ?? [],
+            topUpsLeft: finalStatus.topUpsLeft,
+          }
+        }
       } else if (alreadyHadWords) {
         // Asked about after the busy overlay is gone, below.
       } else if (observedTransientError || finalStatus?.lastError) {
@@ -168,6 +198,8 @@ async function onGenerate(force = false) {
     ui.endBusy()
   }
   if (alreadyHadWords && confirmRetryNoNewWords(alreadyHadWords)) await onGenerate(false)
+  else if (shortfall && confirmTopUp(shortfall))
+    await onGenerateMore(shortfall.target - shortfall.got, true)
 }
 
 function onStart(mode: 'FLIP' | 'MULTIPLE_CHOICE') {
@@ -179,13 +211,13 @@ function onPractice() {
   router.push({ name: 'review', query: { mode: 'flip', practice: 'true' } })
 }
 
-async function onGenerateMore() {
-  const count = topUpCount.value
+async function onGenerateMore(count = topUpCount.value, fillShortfall = false) {
   busy.value = true
   let alreadyHadWords: string[] | null = null
+  let shortfall: Shortfall | null = null
   ui.beginBusy(t('dashboard.generateMoreQueued'))
   try {
-    await generationApi.generateMore(count)
+    await generationApi.generateMore(count, fillShortfall)
     ui.toast('success', t('dashboard.generateMoreQueued'))
     // Poll until new cards show up (log.cardIds length grows)
     const before = status.value?.cardIds.length ?? 0
@@ -194,7 +226,15 @@ async function onGenerateMore() {
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
       const s = await generationApi.getStatus()
       if (s.done && s.cardIds.length > before) {
-        ui.toast('success', t('dashboard.generated', { count: s.cardIds.length - before }))
+        const got = s.cardIds.length - before
+        ui.toast('success', t('dashboard.generated', { count: got }))
+        if (got < count)
+          shortfall = {
+            got,
+            target: count,
+            words: parseNoNewWords(s.lastError) ?? [],
+            topUpsLeft: s.topUpsLeft,
+          }
         grew = true
         break
       }
@@ -220,7 +260,10 @@ async function onGenerateMore() {
     busy.value = false
     ui.endBusy()
   }
-  if (alreadyHadWords && confirmRetryNoNewWords(alreadyHadWords)) await onGenerateMore()
+  if (alreadyHadWords && confirmRetryNoNewWords(alreadyHadWords))
+    await onGenerateMore(count, fillShortfall)
+  else if (shortfall && confirmTopUp(shortfall))
+    await onGenerateMore(shortfall.target - shortfall.got, true)
 }
 </script>
 
@@ -245,6 +288,19 @@ async function onGenerateMore() {
       :missing="setupMissing"
       :preferred-provider="preferredProvider"
     />
+
+    <AppCard v-if="status?.suggestHigherLevel" class="mb-6">
+      <div class="flex flex-col items-start gap-3 md:flex-row md:items-center md:justify-between">
+        <p class="text-sm text-ink-muted">{{ t('dashboard.levelHint') }}</p>
+        <AppButton
+          variant="secondary"
+          class="shrink-0 whitespace-nowrap"
+          @click="router.push({ name: 'settings' })"
+        >
+          {{ t('dashboard.levelHintAction') }}
+        </AppButton>
+      </div>
+    </AppCard>
 
     <AppCard v-if="!status?.done" class="mb-6">
       <div class="flex flex-col items-start gap-3 md:flex-row md:items-center md:justify-between">

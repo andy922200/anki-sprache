@@ -11,6 +11,7 @@ import {
   generateForUser,
   generateAdditionalForUser,
   noNewWordsKey,
+  recordShortStreak,
   type GenerateForUserInput,
 } from './modules/generation/generation.service.js'
 
@@ -36,6 +37,16 @@ async function main() {
 
   const userGenerationQueue = new Queue(QUEUE_NAMES.userGeneration, { connection })
 
+  // Stored on a short deck too, so the UI can offer a top-up that skips these lemmas.
+  async function rememberRejected(userId: string, lemmas: string[] = []) {
+    if (!lemmas.length) return
+    await redis.set(noNewWordsKey(userId), JSON.stringify(lemmas), 'EX', NO_NEW_WORDS_TTL_SECONDS)
+  }
+
+  async function trackShortStreak(userId: string, short: boolean | undefined) {
+    if (short !== undefined) await recordShortStreak(redis, userId, short)
+  }
+
   async function runGenerationJob(job: Job<GenerationJobData>) {
     const date = new Date(job.data.generationDate)
     if (job.data.mode === 'ADDITIONAL') {
@@ -49,6 +60,8 @@ async function main() {
         count: job.data.count ?? 5,
       })
       log.info({ jobId: job.id, ...result }, 'generateAdditionalForUser: done')
+      await rememberRejected(job.data.userId, result.rejectedLemmas)
+      await trackShortStreak(job.data.userId, result.short)
       return result
     }
     const input: GenerateForUserInput = {
@@ -59,6 +72,8 @@ async function main() {
     log.info({ jobId: job.id, userId: input.userId }, 'generateForUser: start')
     const result = await generateForUser(prisma, redis, input)
     log.info({ jobId: job.id, ...result }, 'generateForUser: done')
+    await rememberRejected(input.userId, result.rejectedLemmas)
+    await trackShortStreak(input.userId, result.short)
     return result
   }
 
@@ -73,6 +88,7 @@ async function main() {
           { jobId: job.id, userId: job.data.userId, rejectedLemmas: err.rejectedLemmas },
           'generation: LLM returned only words the user already has',
         )
+        await recordShortStreak(redis, job.data.userId, true)
         await redis.set(
           noNewWordsKey(job.data.userId),
           JSON.stringify(err.rejectedLemmas),

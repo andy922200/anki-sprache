@@ -21,7 +21,10 @@ export async function getStatus(): Promise<GenerationStatusDto> {
   return (await axios.get<GenerationStatusDto>('/generate/status')).data
 }
 
-export async function generateMore(count = 5): Promise<{ jobId: string; status: 'queued' }> {
+export async function generateMore(
+  count = 5,
+  fillShortfall = false,
+): Promise<{ jobId: string; status: 'queued' }> {
   const axios = useAxios()
-  return (await axios.post('/generate/more', { count })).data
+  return (await axios.post('/generate/more', { count, fillShortfall })).data
 }

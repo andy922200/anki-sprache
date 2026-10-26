@@ -3,10 +3,14 @@ import type { FastifyRequest } from 'fastify'
 import type { Queue } from 'bullmq'
 import { z } from 'zod'
 import { QUEUE_NAMES } from '@/shared/plugins/bullmq.plugin.js'
-import { MAX_DAILY_NEW_COUNT } from '@/config/limits.config.js'
+import {
+  MAX_DAILY_NEW_COUNT,
+  MAX_DAILY_TOP_UPS,
+  SHORT_STREAK_HINT_THRESHOLD,
+} from '@/config/limits.config.js'
 import { RATE_LIMITS } from '@/config/rate-limit.config.js'
 import { llmProviderSchema } from '@/shared/schemas/enums.js'
-import { noNewWordsKey } from './generation.service.js'
+import { noNewWordsKey, shortStreakKey } from './generation.service.js'
 
 /**
  * True if the user has a user-generation job currently queued, active, or
@@ -35,6 +39,10 @@ async function isUserGenerationJobInFlight(
 export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
   app.decorateRequest('llmRateKey', '')
   app.addHook('preHandler', app.authenticate)
+
+  const topUpsKey = (userId: string, day: string) => `gen:top-ups:${userId}:${day}`
+  const topUpsLeft = async (userId: string, day: string) =>
+    Math.max(0, MAX_DAILY_TOP_UPS - Number((await app.redis.get(topUpsKey(userId, day))) ?? 0))
 
   // Scope LLM-facing rate limit buckets by the user's currently selected
   // provider+model so switching model gives the user a fresh bucket.
@@ -165,6 +173,8 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
             cardIds: z.array(z.string()),
             provider: llmProviderSchema.nullable(),
             lastError: z.string().nullable(),
+            topUpsLeft: z.number().int(),
+            suggestHigherLevel: z.boolean(),
           }),
         },
       },
@@ -175,6 +185,9 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
         where: { userId },
       })
       const today = new Date().toISOString().slice(0, 10)
+      const topUps = await topUpsLeft(userId, today)
+      const streak = Number((await app.redis.get(shortStreakKey(userId))) ?? 0)
+      const suggestHigherLevel = streak >= SHORT_STREAK_HINT_THRESHOLD
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
 
       const log = await app.prisma.dailyGenerationLog.findUnique({
@@ -198,6 +211,8 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
           cardIds: log.cardIds,
           provider: log.provider,
           lastError: noNewWordsError,
+          topUpsLeft: topUps,
+          suggestHigherLevel,
         }
       }
 
@@ -211,11 +226,20 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
           cardIds: [],
           provider: null,
           lastError: null,
+          topUpsLeft: topUps,
+          suggestHigherLevel,
         }
       }
 
       if (noNewWordsError) {
-        return { done: false, cardIds: [], provider: null, lastError: noNewWordsError }
+        return {
+          done: false,
+          cardIds: [],
+          provider: null,
+          lastError: noNewWordsError,
+          topUpsLeft: topUps,
+          suggestHigherLevel,
+        }
       }
 
       // Not yet done AND no job in flight — surface the most recent failed
@@ -235,6 +259,8 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
         cardIds: [],
         provider: null,
         lastError: recentFail?.errorCode ?? null,
+        topUpsLeft: topUps,
+        suggestHigherLevel,
       }
     },
   )
@@ -247,7 +273,10 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
       },
       preHandler: attachLlmRateKey,
       schema: {
-        body: z.object({ count: z.number().int().min(1).max(MAX_DAILY_NEW_COUNT).default(5) }),
+        body: z.object({
+          count: z.number().int().min(1).max(MAX_DAILY_NEW_COUNT).default(5),
+          fillShortfall: z.boolean().default(false),
+        }),
         response: { 202: z.object({ jobId: z.string(), status: z.literal('queued') }) },
       },
     },
@@ -277,6 +306,13 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
       })
       if (!existing) {
         throw app.httpErrors.badRequest('NO_DAILY_DECK')
+      }
+
+      if (req.body.fillShortfall) {
+        const day = today.toISOString().slice(0, 10)
+        if ((await topUpsLeft(userId, day)) === 0) throw app.httpErrors.conflict('TOP_UP_LIMIT')
+        const used = await app.redis.incr(topUpsKey(userId, day))
+        if (used === 1) await app.redis.expire(topUpsKey(userId, day), 2 * 24 * 60 * 60)
       }
 
       await app.redis.del(noNewWordsKey(userId))

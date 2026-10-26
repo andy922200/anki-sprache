@@ -5,6 +5,7 @@ import type {
   PrismaClient,
   VocabularyCard,
 } from '@/generated/prisma/client.js'
+import { MAX_AVOID_LEMMAS } from '@/config/limits.config.js'
 import { pruneExamples } from '@/shared/audio/pruneExamples.js'
 import { extractJson } from '@/shared/llm/json.js'
 import { getAdapterForUser, type LlmAdapter } from '@/shared/llm/llmClient.js'
@@ -26,6 +27,10 @@ export interface GenerateResult {
   createdNew: number
   reusedExisting: number
   provider: LlmProvider | null
+  /** Lemmas turned down while the deck still came up short of its target. */
+  rejectedLemmas?: string[]
+  /** Whether the deck came up short; absent when nothing was generated this run. */
+  short?: boolean
 }
 
 const LOCK_TTL_SECONDS = 60
@@ -39,6 +44,31 @@ export class NoNewWordsError extends Error {
 }
 
 export const noNewWordsKey = (userId: string) => `gen:no-new-words:${userId}`
+
+const REJECTED_LEMMAS_TTL_SECONDS = 24 * 60 * 60
+const SHORT_STREAK_TTL_SECONDS = 7 * 24 * 60 * 60
+const rejectedLemmasKey = (userId: string) => `gen:rejected-lemmas:${userId}`
+export const shortStreakKey = (userId: string) => `gen:short-streak:${userId}`
+
+/** Lemmas turned down recently, so a fresh request doesn't pay to hear them again. */
+async function recentRejectedLemmas(redis: Redis, userId: string): Promise<string[]> {
+  return (await redis.smembers(rejectedLemmasKey(userId))).slice(0, MAX_AVOID_LEMMAS)
+}
+
+async function rememberRejectedLemmas(redis: Redis, userId: string, lemmas: string[]) {
+  if (!lemmas.length) return
+  await redis.sadd(rejectedLemmasKey(userId), ...lemmas)
+  await redis.expire(rejectedLemmasKey(userId), REJECTED_LEMMAS_TTL_SECONDS)
+}
+
+export async function recordShortStreak(redis: Redis, userId: string, short: boolean) {
+  if (!short) {
+    await redis.del(shortStreakKey(userId))
+    return
+  }
+  await redis.incr(shortStreakKey(userId))
+  await redis.expire(shortStreakKey(userId), SHORT_STREAK_TTL_SECONDS)
+}
 
 export async function generateForUser(
   prisma: PrismaClient,
@@ -136,6 +166,7 @@ export async function generateForUser(
 
     const needed = settings.dailyNewCount - selected.length
     let usedProvider: LlmProvider | null = null
+    let rejectedLemmas: string[] = []
 
     // 2. If short, ask the LLM for new words
     if (needed > 0) {
@@ -152,9 +183,12 @@ export async function generateForUser(
         target: settings.dailyNewCount,
         skipCardIds: new Set([...existingStateIds, ...excludeCardIds]),
         avoidCardIds: excludeCardIds,
+        avoidLemmas: await recentRejectedLemmas(redis, userId),
       })
+      await rememberRejectedLemmas(redis, userId, rejected)
       // An empty log would make /generate/today answer "already-done" for the rest of the day.
       if (selected.length === 0) throw new NoNewWordsError(rejected)
+      if (selected.length < settings.dailyNewCount) rejectedLemmas = rejected
     }
 
     // 3. Create UserCardState (NEW) + DailyGenerationLog atomically
@@ -194,6 +228,8 @@ export async function generateForUser(
       createdNew: needed,
       reusedExisting: selected.length - needed,
       provider: usedProvider,
+      rejectedLemmas,
+      short: selected.length < settings.dailyNewCount,
     }
   } finally {
     await redis.del(lockKey)
@@ -276,6 +312,7 @@ export async function generateAdditionalForUser(
 
     const needed = count - selected.length
     let usedProvider: LlmProvider | null = existingLog.provider
+    let rejectedLemmas: string[] = []
 
     if (needed > 0) {
       if (!settings.preferredLlmProvider) {
@@ -291,8 +328,11 @@ export async function generateAdditionalForUser(
         target: count,
         skipCardIds: existingStateIds,
         avoidCardIds: [],
+        avoidLemmas: await recentRejectedLemmas(redis, userId),
       })
+      await rememberRejectedLemmas(redis, userId, rejected)
       if (selected.length === 0) throw new NoNewWordsError(rejected)
+      if (selected.length < count) rejectedLemmas = rejected
     }
 
     const addedCardIds = selected.map((c) => c.id).filter((id) => !existingLog.cardIds.includes(id))
@@ -323,6 +363,8 @@ export async function generateAdditionalForUser(
       createdNew: needed,
       reusedExisting: addedCardIds.length - needed,
       provider: usedProvider,
+      rejectedLemmas,
+      short: selected.length < count,
     }
   } finally {
     await redis.del(lockKey)
@@ -343,6 +385,7 @@ interface FillFromLlmInput {
   skipCardIds: Set<string>
   /** Dropped cards whose lemmas the first request should steer away from. */
   avoidCardIds: string[]
+  avoidLemmas: string[]
 }
 
 /**
@@ -359,13 +402,13 @@ async function fillFromLlm(prisma: PrismaClient, input: FillFromLlmInput): Promi
     settings.preferredLlmModel,
   )
 
-  let avoidLemmas: string[] = []
+  let avoidLemmas = [...input.avoidLemmas]
   if (input.avoidCardIds.length) {
     const avoided = await prisma.vocabularyCard.findMany({
       where: { id: { in: input.avoidCardIds } },
       select: { lemma: true },
     })
-    avoidLemmas = avoided.map((c) => c.lemma)
+    avoidLemmas = [...new Set([...avoidLemmas, ...avoided.map((c) => c.lemma)])]
   }
 
   const allRejected = new Set<string>()
