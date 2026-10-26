@@ -566,6 +566,13 @@ pnpm --filter ./server test:watch      # 後端 watch 模式
 - **行動謹慎**：不自行 `git push`、不強推、不 `reset --hard`、不刪 branch、不改 CI 去規避測試。破壞性動作一定要先確認。
 - **UI 改動必測**：改前端的話，啟動 dev server 實際操作 golden path 與邊界；不能測就如實說「未進行瀏覽器驗證」。
 
+### Agent Skills
+
+`.claude/skills/*` 是指向 `.agents/skills/*` 的 symlink，而後者再指向與本專案**同層**的 `agent-skills` repo（`../../../agent-skills/<skill>`）。
+
+- 使用 skill 前，請先把 `agent-skills` clone 到 `anki-sprache/` 旁邊（兩個資料夾同層）。
+- 缺少該 repo 時 symlink 會失效，skill 不會被載入，但不影響 build、lint 與測試。
+
 ### 專案特有守則
 
 - **Google OAuth 本機測試**：先至 Google Cloud Console 把 `http://localhost:5173` 加入 Authorized JavaScript Origins。
