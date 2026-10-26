@@ -4,7 +4,7 @@ const perHour = (dev: number, prod: number) =>
   ({ max: isDev ? dev : prod, timeWindow: '1 hour' }) as const
 const perMinute = (max: number) => ({ max, timeWindow: '1 minute' }) as const
 
-/** Mirrors the rate-limit table in AGENTS.md; routes pick their entry from here. */
+/** Mirrors the rate-limit table in .agents/guides/security.md; routes pick their entry from here. */
 export const RATE_LIMITS = {
   global: perMinute(300),
   authGoogle: perMinute(10),

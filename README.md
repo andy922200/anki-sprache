@@ -2,7 +2,7 @@
 
 一套仿 Anki 風格的多語言學習 Web App。以 **FSRS** 間隔重複排程、**使用者自備 LLM API Key（BYOK）** 自動生成每日單字卡，支援多母語翻譯與 Google 登入。
 
-> 📖 詳細的工程規範、程式碼風格與 AI 協作指引請見 [`AGENTS.md`](./AGENTS.md)。
+> 📖 核心工程規範與 AI 協作指引請見 [`AGENTS.md`](./AGENTS.md)，各領域細節（架構、風格、前後端、安全、測試、部署）拆在 [`.agents/guides/`](./.agents/guides/)。
 
 ---
 
@@ -10,42 +10,13 @@
 
 - **FSRS 排程**：以 `ts-fsrs` 實作的現代間隔重複演算法，取代傳統 SM-2。
 - **BYOK LLM 生成**：自行提供 OpenAI / Anthropic Claude / Google Gemini API Key，伺服器以 AES-256-GCM 加密儲存；每日依你的時區於當地 04:00 自動生成新卡，並優先沿用全站已有的單字，不足才呼叫 LLM。
-- **多母語翻譯**：同一張單字卡可同時帶多種母語翻譯，介面會依使用者設定挑選。
+- **多母語翻譯**：同一張單字卡可同時帶多種母語翻譯，介面會依使用者設定挑選。目前啟用德文、英文、葡萄牙文、繁體中文，其餘語言在種子資料中預設停用。
+- **TTS 發音**：單字與例句的音檔以 Google Cloud Text-to-Speech 合成，存放在 Cloudflare R2。
 - **Google 登入**：前端走 Google Identity Services，後端驗 ID Token 後簽發 JWT（access + refresh rotation，refresh token 僅存於 httpOnly cookie）。
 - **FLIP 與選擇題雙模式**：支援傳統翻牌複習與 4 選 1 模式，也有不計入 FSRS 的 Practice 模式。
 - **深色模式 / 繁中 · 英文介面**。
 
----
-
-## 🧱 技術堆疊
-
-| 層級 | 技術 |
-|------|------|
-| Monorepo | pnpm 10 workspaces（`app/` + `server/`） |
-| 前端 | Vue 3.5 · TypeScript 6 · Vite 8（Rolldown）· Tailwind CSS 4 · Pinia 3 · Vue Router 5 · vue-i18n 11 |
-| 後端 | Fastify 5.8（ESM）· Prisma 7（Rust-free + driver adapter）· PostgreSQL 18 · Redis 7 · BullMQ · ts-fsrs 5 · Zod 4 · Pino 10 |
-| LLM | `@anthropic-ai/sdk` · `openai` · `@google/generative-ai`（已 deprecated，將遷移至 `@google/genai`） |
-| 安全 | `@fastify/helmet` · `@fastify/cors` · `@fastify/rate-limit` · AES-256-GCM |
-| 風格 / Lint | ESLint 10 + Prettier 3.8（前端） · Biome 2（後端，lint+format 一站式） |
-| 測試 | Vitest 4 · happy-dom 20（前端） |
-| 部署 | AWS Lightsail（docker compose）+ Cloudflare（Tunnel / Pages / R2） |
-
----
-
-## 🏗️ 架構
-
-```
-┌──────────────┐   HTTPS + Cookies    ┌──────────────┐
-│  app (Vue3)  │ ───────────────────▶ │  server (API)│─── Prisma ──▶ Postgres 18
-│  Vite SPA    │ ◀─────────────────── │  Fastify 5   │─── ioredis ─▶ Redis 7
-└──────────────┘   JWT + refresh      └──────────────┘                    ▲
-                                              │                           │
-                                              ▼ BullMQ                    │
-                                     ┌──────────────┐                     │
-                                     │  worker      │ ───────────────────┘
-                                     │  BullMQ      │  （每小時 fan-out，
-                                     └──────────────┘   每位使用者當地 04:00 生成）
-```
+技術堆疊、架構圖與目錄結構請見 [`architecture.md`](./.agents/guides/architecture.md)。
 
 ---
 
@@ -66,17 +37,18 @@ pnpm install
 # 2. 啟動 Postgres + Redis
 pnpm docker:up
 
-# 3. 複製環境變數範本
-cp .env.example .env
+# 3. 複製環境變數範本（後端與前端各自一份，根目錄沒有 .env）
 cp server/.env.example server/.env
 cp app/.env.example app/.env
 ```
 
-編輯 `.env` 填入：
+編輯 `server/.env`，以下變數沒填後端會無法啟動：
 
-- `GOOGLE_CLIENT_ID`（Google Cloud Console → OAuth Client，類型 Web application）
+- `GOOGLE_CLIENT_ID`（Google Cloud Console → OAuth Client，類型 Web application），同一個值也要填進 `app/.env` 的 `VITE_GOOGLE_CLIENT_ID`
 - `JWT_ACCESS_SECRET`、`JWT_REFRESH_SECRET`（以 `openssl rand -base64 48` 產生）
 - `MASTER_KEY`（BYOK 加密主金鑰，以 `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` 產生）
+- `R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET`、`R2_PUBLIC_URL`（Cloudflare R2，存放 TTS 音檔；本機建議用獨立的 dev bucket，避免污染正式環境）
+- `GOOGLE_TTS_API_KEY`（Google Cloud Text-to-Speech，限制為該 API）
 
 > ⚠️ Google OAuth 本機測試需先把 `http://localhost:5173` 加入 Google Cloud Console 的 **Authorized JavaScript Origins**。
 
@@ -94,7 +66,7 @@ pnpm db:seed       # 匯入語言種子資料
 ### 啟動開發環境
 
 ```bash
-pnpm dev           # 同時啟動 app + server
+pnpm up:all        # 啟動 Postgres + Redis，並同時啟動 app + server + worker
 ```
 
 或分開啟動：
@@ -107,68 +79,19 @@ pnpm dev:worker    # BullMQ worker（正式環境務必獨立程序）
 
 開發時可開 Swagger UI 檢視 API：<http://localhost:3000/docs>
 
----
-
-## 📜 常用指令
-
-| 指令 | 用途 |
-|------|------|
-| `pnpm dev` | 同時啟動 app + server |
-| `pnpm build` | 前後端 production build |
-| `pnpm typecheck` | 兩個 workspace 都跑 `tsc --noEmit` |
-| `pnpm lint` | 兩個 workspace 跑 lint（前端 ESLint、後端 Biome） |
-| `pnpm format` | 兩個 workspace 寫入格式化（前端 Prettier、後端 Biome） |
-| `pnpm format:check` | dry-run 格式檢查，CI 友善 |
-| `pnpm test` | 兩個 workspace 跑 `vitest run` |
-| `pnpm db:migrate` | 套用 / 建立 Prisma migration |
-| `pnpm db:seed` | 匯入種子資料 |
-| `pnpm db:studio` | 開啟 Prisma Studio（<http://localhost:5555>） |
-| `pnpm docker:up` / `pnpm docker:down` | 啟動 / 停止本機 Postgres + Redis |
+完整指令表（build、lint、format、test、DB、Docker、一次性維護腳本）請見 [`setup-and-commands.md`](./.agents/guides/setup-and-commands.md)；測試慣例請見 [`testing.md`](./.agents/guides/testing.md)。
 
 ---
 
-## 🗂️ 目錄結構
+## 🔒 安全設計
 
-```
-anki-sprache/
-├── app/                  # Vue 3 SPA
-│   └── src/
-│       ├── pages/        # 7 個頁面（Dashboard / Review / Logbook / Settings ...）
-│       ├── components/   # layout · cards · common
-│       ├── stores/       # Pinia stores
-│       ├── api/          # API client 模組
-│       ├── composables/  # useAxios · useTheme
-│       └── i18n/locales/ # en.json · zh-TW.json
-├── server/               # Fastify API + BullMQ worker
-│   ├── src/
-│   │   ├── app.ts        # Fastify builder
-│   │   ├── index.ts      # HTTP 入口
-│   │   ├── worker.ts     # BullMQ worker 入口
-│   │   ├── modules/      # auth / users / cards / reviews / generation ...
-│   │   └── shared/       # crypto · fsrs · llm · plugins
-│   └── prisma/           # schema.prisma · migrations · seed.ts
-├── docker-compose.yml    # dev 用 postgres + redis
-├── deploy/               # 正式環境 compose + 每日備份腳本
-├── AGENTS.md             # 工程與 AI 協作單一事實來源
-└── CLAUDE.md             # 參照 AGENTS.md
-```
-
----
-
-## 🔒 安全設計重點
-
-- **Access Token** 只存在 Pinia 記憶體，**不**寫入 `localStorage`；**Refresh Token** 僅存 httpOnly cookie，DB 只保留 SHA-256 hash。
-- **BYOK API Key** 以 AES-256-GCM 加密儲存（每筆獨立 IV + auth tag），UI 僅顯示 SHA-256 前 12 字元指紋，原始金鑰僅在呼叫 LLM 的當下解密於記憶體。
-- **Rate Limit** 以 Redis 後端實作，針對登入、refresh、review、generation 有各自的配額。
-- 所有路由皆以 Zod schema 驗證；違反回 `400` + `issues` 陣列。
-
-完整安全與認證細節請見 [`AGENTS.md` § E](./AGENTS.md#e-安全性考量-security-considerations)。
+Access Token 只存在記憶體、Refresh Token 僅存 httpOnly cookie，使用者的 LLM API Key 以 AES-256-GCM 加密儲存，所有路由皆以 Zod 驗證並由 Redis 後端做 Rate Limit。完整細節請見 [`security.md`](./.agents/guides/security.md)。
 
 ---
 
 ## ☁️ 部署（Lightsail + Cloudflare）
 
-單台 AWS Lightsail（2GB）以 docker compose 跑後端，前端放 Cloudflare Pages，對外流量全走 Cloudflare Tunnel，VM 不開 80 / 443。
+單台 AWS Lightsail（2GB）以 docker compose 跑後端，前端放 Cloudflare Pages，對外流量全走 Cloudflare Tunnel，VM 不開 80 / 443。修改部署設定時要守的規則請見 [`deployment.md`](./.agents/guides/deployment.md)。
 
 ```
 瀏覽器 ──▶ Cloudflare ──▶ Pages（app）                          anki.example.com
@@ -202,7 +125,7 @@ anki-sprache/
    curl https://anki-api.example.com/health
    ```
 
-`server` 啟動時會自動執行 `prisma migrate deploy` 與種子腳本（`Language` 表非空時略過）。`app.env` 的變數請見 [`deploy/app.env.example`](./deploy/app.env.example)。前端與 API 位於同一個網站（`anki.example.com` 與 `anki-api.example.com`）底下，因此使用 `COOKIE_SAMESITE=lax`，`COOKIE_DOMAIN` 設為 API 主機名稱即可。
+`deploy/.env` 放 compose 內插用的 `POSTGRES_PASSWORD` 與 `TUNNEL_TOKEN`；`app.env` 放 `server` / `worker` 的執行期變數（含 R2 與 TTS），欄位請見 [`deploy/app.env.example`](./deploy/app.env.example)。`server` 啟動時會自動執行 `prisma migrate deploy` 與種子腳本（`Language` 表非空時略過）。前端與 API 位於同一個網站（`anki.example.com` 與 `anki-api.example.com`）底下，因此使用 `COOKIE_SAMESITE=lax`，`COOKIE_DOMAIN` 設為 API 主機名稱即可。
 
 ### 自動佈署（GitHub Actions）
 
@@ -250,22 +173,11 @@ docker compose exec -T postgres pg_restore -U anki -d anki_sprache --clean --if-
 
 ---
 
-## 🧪 測試
+## 🔊 TTS 音檔
 
-```bash
-pnpm test                              # 全 workspace
-pnpm --filter ./app test               # 前端
-pnpm --filter ./server test            # 後端
-pnpm --filter ./server test:watch      # 後端 watch
-```
+音檔機制（合成流程、鎖、快取驗證）請見 [`backend.md`](./.agents/guides/backend.md)。
 
-> pnpm 10 不再做 workspace 名稱的子字串比對，workspace 的實際 package 名稱是 `anki-sprache-{app,server}`，所以 `--filter` 一律用路徑前綴（`./app` / `./server`）。
-
-> 測試基礎設施已就位，但目前尚無測試檔。新增時請參考 [`AGENTS.md` § D](./AGENTS.md#d-測試指南-testing-instructions) 的放置慣例。
-
----
-
-## 🔊 TTS 音檔對照查詢
+### 對照查詢
 
 R2 bucket 內的音檔採 content-addressed 命名（`audio/{kind}/{lang}/{sha256}.mp3`），hash 沒辦法直接認人。想知道某個 key 對應到哪個單字或例句，用 `pnpm db:studio` 打開 Prisma Studio 的 SQL 分頁跑：
 
@@ -286,12 +198,24 @@ ORDER BY c."languageCode", c.lemma, e."orderIndex";
 
 > 每個 R2 物件也會夾帶 `text` / `lang` / `kind` 三個 metadata 欄位（`text` 為 URL-encoded 以相容非 ASCII），在 Cloudflare R2 dashboard 點開物件即可看到。
 
+### 維護腳本
+
+`server/scripts/` 下的腳本都預設 dry-run，加 `--confirm` 才會實際寫入或刪除，且會作用在本機 `server/.env` 指向的 DB 與 R2 bucket，執行前請先核對腳本印出的 bucket 與 DB host。用法與參數見各腳本檔頭註解。
+
+| 指令（在專案根目錄用 `pnpm --filter ./server <script>`） | 用途 |
+|------|------|
+| `audit:audio` | 找出 R2 上沒有 DB 參照的孤兒音檔，可選擇刪除 |
+| `prune:audio:lang <code>` | 刪除某個語言代碼底下的全部音檔（停用語言時使用） |
+| `backfill:pt-gender` | 以 LLM 回填既有葡萄牙文名詞的陰陽性；需自備 `BACKFILL_LLM_PROVIDER` / `BACKFILL_LLM_KEY` |
+
+> 想對遠端 DB 或正式 bucket 執行時，用 shell 匯出 `DATABASE_URL`、`R2_BUCKET`、`R2_PUBLIC_URL` 覆寫即可（shell 優先於 `--env-file`），仍須保留本機 `server/.env` 以通過環境變數校驗。
+
 ---
 
 ## 📚 更多文件
 
-- [`AGENTS.md`](./AGENTS.md) — 完整的工程規範、命名慣例、安全實作、頁面權限、部署細節、AI 協作守則
-- `http://localhost:3000/docs` — 後端啟動後可用的 Swagger UI
+- [`AGENTS.md`](./AGENTS.md) — 核心工程規範、AI 協作守則與 guides 索引
+- [`.agents/guides/`](./.agents/guides/) — 架構、程式碼風格、前後端、每日生成、安全實作、測試、部署細節
 
 ---
 
