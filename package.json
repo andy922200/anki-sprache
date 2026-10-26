@@ -23,6 +23,7 @@
     "db:seed": "pnpm --filter ./server exec prisma db seed",
     "db:studio": "pnpm --filter ./server exec prisma studio",
     "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "up:all": "pnpm docker:up && pnpm dev:all"
   }
 }
