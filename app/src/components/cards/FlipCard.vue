@@ -8,6 +8,7 @@ import AudioButton from './AudioButton.vue'
 
 interface Props {
   card: CardDto
+  hideExamples?: boolean
 }
 const props = defineProps<Props>()
 const { t } = useI18n()
@@ -71,18 +72,25 @@ defineExpose({
         class="flip-card-face flip-card-back rounded-card bg-white shadow-md border border-brand-100 dark:bg-surface-dark-muted dark:border-surface-dark-muted"
       >
         <div class="flip-card-content p-8">
-          <p class="mb-2 text-sm uppercase tracking-wide text-ink-muted">{{ t('flipCard.meaning') }}</p>
+          <p class="mb-2 text-sm uppercase tracking-wide text-ink-muted">
+            {{ t('flipCard.meaning') }}
+          </p>
           <h3 class="text-2xl font-medium wrap-break-word">{{ card.translation }}</h3>
-          <div v-if="card.examples.length" class="mt-6">
-            <p class="mb-2 text-sm uppercase tracking-wide text-ink-muted">{{ t('flipCard.examples') }}</p>
+          <div v-if="!hideExamples && card.examples.length" class="mt-6">
+            <p class="mb-2 text-sm uppercase tracking-wide text-ink-muted">
+              {{ t('flipCard.examples') }}
+            </p>
             <ul class="space-y-3">
               <li v-for="(ex, idx) in card.examples" :key="ex.id">
                 <div class="flex items-start gap-2">
                   <AudioButton
-                    :ref="(el) => (exampleAudioRefs[idx] = el as InstanceType<typeof AudioButton> | null)"
+                    :ref="
+                      (el) =>
+                        (exampleAudioRefs[idx] = el as InstanceType<typeof AudioButton> | null)
+                    "
                     class="mt-0.5 shrink-0"
                     :initial-url="ex.audioUrl"
-                    :fetcher="() => fetchExampleAudio(card.id, ex.id)"
+                    :fetcher="() => fetchExampleAudio(ex.id)"
                   />
                   <div class="min-w-0 flex-1">
                     <p class="text-lg wrap-break-word">{{ ex.text }}</p>

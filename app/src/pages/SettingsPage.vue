@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import axios from 'axios'
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -8,26 +7,14 @@ import AppButton from '@/components/common/AppButton.vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { useSettingsStore } from '@/stores/settings.store'
 import { useUiStore } from '@/stores/ui.store'
-import { useGenerationStore } from '@/stores/generation.store'
 import { useCardsStore } from '@/stores/cards.store'
 import * as usersApi from '@/api/users.api'
 import * as languagesApi from '@/api/languages.api'
-import * as generationApi from '@/api/generation.api'
-import * as llmKeysApi from '@/api/llmKeys.api'
-import type {
-  LanguageDto,
-  CEFR,
-  LlmProvider,
-  UiLanguage,
-  UserSettingsDto,
-  MaskedKeyDto,
-  GenerationStatusDto,
-} from '@/types/domain'
+import type { LanguageDto, CEFR, LlmProvider, UiLanguage, UserSettingsDto } from '@/types/domain'
 
 const auth = useAuthStore()
 const settings = useSettingsStore()
 const ui = useUiStore()
-const generation = useGenerationStore()
 const cards = useCardsStore()
 const { t } = useI18n()
 
@@ -36,8 +23,6 @@ const displayName = ref('')
 const timezone = ref('UTC')
 const draft = ref<UserSettingsDto | null>(null)
 const saving = ref(false)
-const keys = ref<MaskedKeyDto[]>([])
-const queuingUpgrade = ref(false)
 
 const cefrOptions: CEFR[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
 const providerOptions: (LlmProvider | '')[] = ['', 'OPENAI', 'ANTHROPIC', 'GOOGLE']
@@ -62,12 +47,6 @@ const modelPlaceholder = computed(() => {
   return p ? defaultModelsByProvider[p] : 'Pick a provider first'
 })
 
-const preferredProvider = computed<LlmProvider | null>(
-  () => settings.settings?.preferredLlmProvider ?? null,
-)
-
-const upgradeInFlight = computed(() => generation.UPGRADE_IN_FLIGHT)
-
 function languageOptionLabel(l: LanguageDto): string {
   const localized = t(`languages.${l.code}`)
   return localized === l.nativeName ? localized : `${localized} - ${l.nativeName}`
@@ -91,27 +70,6 @@ const nativeOptions = computed(() =>
   ),
 )
 
-const hasUpgradeRelevantUnsaved = computed(() => {
-  if (!draft.value || !settings.settings) return false
-  const s = settings.settings
-  const d = draft.value
-  return (
-    d.targetLanguageCode !== s.targetLanguageCode ||
-    d.nativeLanguageCode !== s.nativeLanguageCode ||
-    d.cefrLevel !== s.cefrLevel ||
-    (d.preferredLlmProvider ?? null) !== (s.preferredLlmProvider ?? null) ||
-    (d.preferredLlmModel ?? null) !== (s.preferredLlmModel ?? null)
-  )
-})
-
-const upgradeDisabledReason = computed<'unsaved' | 'provider' | 'key' | null>(() => {
-  if (!settings.settings) return null
-  if (hasUpgradeRelevantUnsaved.value) return 'unsaved'
-  if (!preferredProvider.value) return 'provider'
-  const hasKey = keys.value.some((k) => k.provider === preferredProvider.value)
-  return hasKey ? null : 'key'
-})
-
 onMounted(async () => {
   languages.value = await languagesApi.listLanguages()
   await settings.load()
@@ -120,100 +78,17 @@ onMounted(async () => {
     displayName.value = auth.user.displayName
     timezone.value = auth.user.timezone
   }
-  try {
-    keys.value = await llmKeysApi.listKeys()
-  } catch {
-    keys.value = []
-  }
 })
-
-const POLL_INTERVAL_MS = 3000
-const POLL_MAX_ATTEMPTS = 50
-
-// Enqueue an example-upgrade job and block the UI with GlobalBusyOverlay
-// until it finishes. Mirrors DashboardPage.onGenerate so the user can't
-// wander off to /review before the worker has rewritten the examples.
-// Guards only against double-click on this tab; if a job is already
-// running (ours or another tab's), we still attach and poll to completion.
-async function runUpgradeExamplesBlocking() {
-  if (queuingUpgrade.value) return
-  queuingUpgrade.value = true
-  ui.beginBusy(t('settings.upgradeInProgress'))
-  try {
-    const res = await generationApi.upgradeExamples()
-    if (res.status === 'already-running') {
-      ui.toast('info', t('settings.upgradeRunningExternally'))
-    }
-
-    // Foreground poll: hit the raw API so we don't trip the store's
-    // handleTransition toast, which would double-announce the summary.
-    generation.stopPolling()
-    let finalStatus: GenerationStatusDto | null = null
-    for (let i = 0; i < POLL_MAX_ATTEMPTS; i++) {
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-      finalStatus = await generationApi.getStatus()
-      if (!finalStatus.upgradeInFlight) break
-    }
-
-    // Pre-ack the result BEFORE refresh so handleTransition doesn't
-    // re-toast the summary we're about to surface ourselves.
-    if (finalStatus?.lastUpgradeResult) {
-      generation.acknowledgeUpgradeCompleted(finalStatus.lastUpgradeResult.completedAt)
-    }
-    await generation.refresh()
-
-    const result = finalStatus?.lastUpgradeResult
-    if (finalStatus && !finalStatus.upgradeInFlight && result) {
-      if (result.failed > 0) {
-        ui.toast(
-          'error',
-          t('settings.upgradePartialSummary', {
-            upgraded: result.upgraded,
-            failed: result.failed,
-            skipped: result.skipped,
-            error: result.firstErrorReason ?? 'unknown',
-          }),
-          8000,
-        )
-      } else {
-        ui.toast(
-          'success',
-          t('settings.upgradeSuccessSummary', {
-            upgraded: result.upgraded,
-            skipped: result.skipped,
-          }),
-          6000,
-        )
-      }
-    } else if (finalStatus?.upgradeInFlight) {
-      ui.toast('error', t('settings.upgradeTooSlow'))
-    }
-  } catch (err) {
-    if (axios.isAxiosError(err)) {
-      const msg = String(err.response?.data?.message ?? '')
-      if (msg.startsWith('LLM_PROVIDER_NOT_SET')) {
-        ui.toast('error', t('settings.upgradeDisabledNoProvider'))
-      } else if (msg.startsWith('LLM_API_KEY_MISSING')) {
-        const provider = msg.split(':')[1] ?? ''
-        ui.toast('error', t('settings.upgradeDisabledNoKey', { provider }))
-      } else {
-        ui.toast('error', t('settings.upgradeFailed', { error: msg || 'error' }))
-      }
-    } else {
-      ui.toast('error', t('settings.upgradeFailed', { error: 'unknown' }))
-    }
-  } finally {
-    ui.endBusy()
-    queuingUpgrade.value = false
-  }
-}
 
 async function save() {
   saving.value = true
   try {
     if (auth.user) {
       if (displayName.value !== auth.user.displayName || timezone.value !== auth.user.timezone) {
-        const updated = await usersApi.patchMe({ displayName: displayName.value, timezone: timezone.value })
+        const updated = await usersApi.patchMe({
+          displayName: displayName.value,
+          timezone: timezone.value,
+        })
         auth.setUser(updated)
       }
     }
@@ -221,35 +96,24 @@ async function save() {
       const prevTarget = settings.settings?.targetLanguageCode
       const prevNative = settings.settings?.nativeLanguageCode
       const prevCefr = settings.settings?.cefrLevel
+      const prevMaxDue = settings.settings?.maxDueCards
       await settings.update({
         targetLanguageCode: draft.value.targetLanguageCode,
         nativeLanguageCode: draft.value.nativeLanguageCode,
         cefrLevel: draft.value.cefrLevel,
         dailyNewCount: draft.value.dailyNewCount,
+        maxDueCards: draft.value.maxDueCards,
         preferredLlmProvider: draft.value.preferredLlmProvider || null,
         preferredLlmModel: draft.value.preferredLlmModel || null,
         uiLanguage: draft.value.uiLanguage,
       })
-      const languagePairChanged =
+      const reviewQueueStale =
         draft.value.targetLanguageCode !== prevTarget ||
-        draft.value.nativeLanguageCode !== prevNative
-      if (languagePairChanged) {
-        cards.reset()
-        void generation.refresh()
-      }
+        draft.value.nativeLanguageCode !== prevNative ||
+        draft.value.cefrLevel !== prevCefr ||
+        draft.value.maxDueCards !== prevMaxDue
+      if (reviewQueueStale) cards.reset()
       ui.toast('success', t('settings.saved'))
-
-      // CEFR change → auto-run example upgrade so historical cards pick up
-      // the new level immediately. Without this the user has to remember a
-      // second click, and /review falls back to old-level examples.
-      const cefrChanged = draft.value.cefrLevel !== prevCefr
-      if (cefrChanged) {
-        if (!upgradeDisabledReason.value) {
-          await runUpgradeExamplesBlocking()
-        } else {
-          ui.toast('info', t('settings.upgradeNeededAfterCefrChange'))
-        }
-      }
     } else {
       ui.toast('success', t('settings.saved'))
     }
@@ -258,10 +122,6 @@ async function save() {
   } finally {
     saving.value = false
   }
-}
-
-async function onUpgradeExamples() {
-  await runUpgradeExamplesBlocking()
 }
 </script>
 
@@ -353,29 +213,17 @@ async function onUpgradeExamples() {
             class="mt-1 w-full rounded-md border border-border bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-border-dark"
           />
         </label>
-      </div>
-    </AppCard>
-
-    <AppCard v-if="draft" class="mb-6">
-      <h2 class="mb-3 text-lg font-semibold">{{ t('settings.upgradeSection') }}</h2>
-      <p class="mb-3 text-sm text-ink-muted">{{ t('settings.upgradeHint') }}</p>
-      <div class="flex flex-wrap items-center gap-3">
-        <AppButton
-          variant="secondary"
-          :disabled="queuingUpgrade || upgradeInFlight || !!upgradeDisabledReason"
-          @click="onUpgradeExamples"
-        >
-          {{ upgradeInFlight ? t('settings.upgradeInProgress') : t('settings.upgradeButton') }}
-        </AppButton>
-        <span v-if="upgradeDisabledReason === 'unsaved'" class="text-xs text-amber-600 dark:text-amber-400">
-          {{ t('settings.upgradeDisabledUnsaved') }}
-        </span>
-        <span v-else-if="upgradeDisabledReason === 'provider'" class="text-xs text-ink-muted">
-          {{ t('settings.upgradeDisabledNoProvider') }}
-        </span>
-        <span v-else-if="upgradeDisabledReason === 'key' && preferredProvider" class="text-xs text-ink-muted">
-          {{ t('settings.upgradeDisabledNoKey', { provider: t(`provider.${preferredProvider}`) }) }}
-        </span>
+        <label class="text-sm">
+          {{ t('settings.maxDueCards') }}
+          <input
+            v-model.number="draft.maxDueCards"
+            type="number"
+            min="1"
+            max="200"
+            class="mt-1 w-full rounded-md border border-border bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-border-dark"
+          />
+          <span class="mt-1 block text-xs text-ink-muted">{{ t('settings.maxDueCardsHint') }}</span>
+        </label>
       </div>
     </AppCard>
 
@@ -409,8 +257,8 @@ async function onUpgradeExamples() {
       <p class="mt-3 text-sm text-ink-muted">
         {{ t('settings.manageKeys') }}
         <RouterLink class="text-brand-500 underline" to="/settings/api-keys">
-          {{ t('settings.apiKeysLink') }}
-        </RouterLink>.
+          {{ t('settings.apiKeysLink') }} </RouterLink
+        >.
         {{ t('settings.modelDocsHint') }}
       </p>
     </AppCard>

@@ -62,7 +62,10 @@
     "comeBack": "待會再回來繼續下一波。",
     "backDashboard": "返回今日",
     "saveFailed": "儲存複習紀錄失敗",
-    "practiceBadge": "練習模式（不會更新進度）"
+    "practiceBadge": "練習模式（不會更新進度）",
+    "retry": "重試",
+    "goSettings": "前往設定",
+    "preparing": "正在準備例句…"
   },
   "flipCard": {
     "flipHint": "點擊或按空白鍵翻牌",
@@ -116,21 +119,8 @@
     "modelDocsHint": "模型名稱常有更動 — 請查閱各提供者官方文件取得最新 ID。",
     "saved": "設定已儲存",
     "saveFailed": "儲存設定失敗",
-    "upgradeSection": "例句難度",
-    "upgradeHint": "切換 CEFR 等級後，既有字卡仍沿用原本難度的例句。按下方按鈕可針對你正在學習中的字卡，用你自己的 LLM 金鑰重新生成符合目前等級的例句。",
-    "upgradeButton": "將例句調整到目前等級",
-    "upgradeQueued": "已排入調整工作 — 你可以繼續使用其他功能，完成後會通知你。",
-    "upgradeInProgress": "正在調整例句…",
-    "upgradeRunningExternally": "已有另一個分頁在執行調整。",
-    "upgradeSuccess": "例句已調整 — 重新打開字卡即可看到新例句。",
-    "upgradeSuccessSummary": "例句調整完成：成功 {upgraded} 張、跳過 {skipped} 張。",
-    "upgradePartialSummary": "例句調整完成：成功 {upgraded} 張、失敗 {failed} 張、跳過 {skipped} 張（最近錯誤：{error}）。",
-    "upgradeFailed": "調整失敗：{error}",
-    "upgradeTooSlow": "調整花費時間超過預期 — 請檢查 worker 日誌",
-    "upgradeDisabledNoProvider": "請先到偏好設定選擇 LLM 提供者並儲存。",
-    "upgradeDisabledNoKey": "請先到 API 金鑰頁面新增 {provider} 金鑰。",
-    "upgradeDisabledUnsaved": "你有尚未儲存的設定變更 — 請先按「儲存」再進行調整。",
-    "upgradeNeededAfterCefrChange": "已變更 CEFR 等級 — 請補上 LLM 提供者與金鑰後，回到本頁點選「將例句調整到目前等級」。"
+    "maxDueCards": "單次複習卡片上限",
+    "maxDueCardsHint": "一次複習佇列最多載入的待複習卡片數（1–200）。"
   },
   "apiKeys": {
     "title": "API 金鑰",
@@ -197,6 +187,13 @@
   "errors": {
     "tooManyRequests": "請求過於頻繁 — 請稍慢一點",
     "serverError": "伺服器錯誤，請再試一次",
-    "networkError": "網路錯誤"
+    "networkError": "網路錯誤",
+    "llmRateLimited": "LLM 供應商限制了請求頻率（429），請稍候再重試。",
+    "llmApiKeyInvalid": "LLM API 金鑰被拒絕，請至 API 金鑰頁面確認。",
+    "llmQuotaExceeded": "LLM 帳戶額度不足或已用盡。",
+    "llmUpstreamError": "LLM 供應商回傳錯誤，請稍後重試。",
+    "llmProviderNotSet": "請先在設定中選擇偏好的 LLM 供應商，才能產生例句。",
+    "llmApiKeyMissing": "請先在設定 → API 金鑰中新增金鑰，才能產生例句。",
+    "examplesInProgress": "例句仍在產生中，請稍後再試。"
   }
 }

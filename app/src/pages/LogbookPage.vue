@@ -66,7 +66,7 @@ async function load(reset: boolean) {
   try {
     const page = await reviewsApi.getLogbook({
       limit: 50,
-      cursor: reset ? undefined : nextCursor.value ?? undefined,
+      cursor: reset ? undefined : (nextCursor.value ?? undefined),
       rating: ratingFilter.value || undefined,
       mode: modeFilter.value || undefined,
     })
@@ -170,7 +170,7 @@ function fmtTime(iso: string) {
         <div v-if="previewLoading" class="py-12 text-center text-ink-muted">
           {{ t('common.loading') }}
         </div>
-        <FlipCard v-else-if="previewCard" :key="previewCard.id" :card="previewCard" />
+        <FlipCard v-else-if="previewCard" :key="previewCard.id" :card="previewCard" hide-examples />
         <div class="mt-4 flex justify-end">
           <AppButton variant="secondary" size="sm" @click="closePreview">
             {{ t('common.close') }}

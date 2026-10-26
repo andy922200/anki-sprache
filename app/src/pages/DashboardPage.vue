@@ -28,20 +28,22 @@ const keys = ref<MaskedKeyDto[]>([])
 
 const dailyNewCount = computed<number>(() => settings.settings?.dailyNewCount ?? 5)
 const dueCount = computed<number>(() => dueCards.value.length)
-// Preview length tracks the user's daily-new-count setting; if the queue is
-// shorter than that, just show whatever's in there.
-const todayPreview = computed<CardDto[]>(() => dueCards.value.slice(0, dailyNewCount.value))
+// dueCount is capped at maxDueCards, so a daily target above the cap would
+// otherwise look permanently "low".
+const topUpTarget = computed<number>(() =>
+  Math.min(dailyNewCount.value, settings.settings?.maxDueCards ?? dailyNewCount.value),
+)
+const PREVIEW_COUNT = 5
+const todayPreview = computed<CardDto[]>(() => dueCards.value.slice(0, PREVIEW_COUNT))
 
 // "Top up" affordance shows whenever today's deck exists and the due queue
 // has dropped below the user's daily target. Keeping the trigger explicit
 // (BYOK pays per LLM call) — we only surface the CTA, never auto-generate.
 const showTopUp = computed<boolean>(
   () =>
-    !!status.value?.done &&
-    status.value.cardIds.length > 0 &&
-    dueCount.value < dailyNewCount.value,
+    !!status.value?.done && status.value.cardIds.length > 0 && dueCount.value < topUpTarget.value,
 )
-const topUpCount = computed<number>(() => Math.max(1, dailyNewCount.value - dueCount.value))
+const topUpCount = computed<number>(() => Math.max(1, topUpTarget.value - dueCount.value))
 
 const preferredProvider = computed<LlmProvider | null>(
   () => settings.settings?.preferredLlmProvider ?? null,
@@ -57,7 +59,7 @@ const setupMissing = computed<'provider' | 'key' | null>(() => {
 async function refresh() {
   const [s, due, k] = await Promise.all([
     generationApi.getStatus(),
-    cardsApi.getDue(100),
+    cardsApi.getDue(),
     llmKeysApi.listKeys(),
   ])
   status.value = s
@@ -126,13 +128,19 @@ async function onGenerate(force = false) {
       } else if (status === 429) {
         // interceptor already toasted
       } else if (status) {
-        ui.toast('error', t('dashboard.generationStatusError', { status, message: msg || 'server error' }))
+        ui.toast(
+          'error',
+          t('dashboard.generationStatusError', { status, message: msg || 'server error' }),
+        )
       } else {
         ui.toast('error', t('dashboard.generationNetworkError'))
       }
       await refresh()
     } else {
-      ui.toast('error', t('dashboard.generationFailed', { error: err instanceof Error ? err.message : 'unknown' }))
+      ui.toast(
+        'error',
+        t('dashboard.generationFailed', { error: err instanceof Error ? err.message : 'unknown' }),
+      )
     }
   } finally {
     busy.value = false
@@ -197,9 +205,11 @@ async function onGenerateMore() {
         {{ t('dashboard.greeting', { name: auth.user?.displayName ?? 'learner' }) }}
       </h1>
       <p class="mt-1 text-sm text-ink-muted">
-        {{ t('dashboard.target') }}: <strong>{{ settings.settings?.targetLanguageCode ?? '—' }}</strong> ·
+        {{ t('dashboard.target') }}:
+        <strong>{{ settings.settings?.targetLanguageCode ?? '—' }}</strong> ·
         {{ t('dashboard.level') }}: <strong>{{ settings.settings?.cefrLevel ?? '—' }}</strong> ·
-        {{ t('dashboard.dailyNew') }}: <strong>{{ settings.settings?.dailyNewCount ?? '—' }}</strong>
+        {{ t('dashboard.dailyNew') }}:
+        <strong>{{ settings.settings?.dailyNewCount ?? '—' }}</strong>
       </p>
     </AppCard>
 
@@ -266,16 +276,11 @@ async function onGenerateMore() {
           {{
             dueCount === 0
               ? t('dashboard.caughtUp')
-              : t('dashboard.runningLow', { count: dueCount, target: dailyNewCount })
+              : t('dashboard.runningLow', { count: dueCount, target: topUpTarget })
           }}
         </p>
         <div class="flex flex-wrap gap-2">
-          <AppButton
-            v-if="dueCount === 0"
-            variant="secondary"
-            :disabled="busy"
-            @click="onPractice"
-          >
+          <AppButton v-if="dueCount === 0" variant="secondary" :disabled="busy" @click="onPractice">
             {{ t('dashboard.practiceAgain') }}
           </AppButton>
           <AppButton variant="ghost" :disabled="!!setupMissing || busy" @click="onGenerateMore">

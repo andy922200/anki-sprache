@@ -4,8 +4,7 @@ import type { GenerationStatusDto } from '@/types/domain'
 export async function generateToday(
   opts: { force?: boolean } = {},
 ): Promise<
-  | { jobId: string; status: 'queued' }
-  | { jobId: null; status: 'already-done'; cardIds: string[] }
+  { jobId: string; status: 'queued' } | { jobId: null; status: 'already-done'; cardIds: string[] }
 > {
   const axios = useAxios()
   return (
@@ -25,11 +24,4 @@ export async function getStatus(): Promise<GenerationStatusDto> {
 export async function generateMore(count = 5): Promise<{ jobId: string; status: 'queued' }> {
   const axios = useAxios()
   return (await axios.post('/generate/more', { count })).data
-}
-
-export async function upgradeExamples(): Promise<
-  { jobId: string; status: 'queued' } | { jobId: null; status: 'already-running' }
-> {
-  const axios = useAxios()
-  return (await axios.post('/generate/examples/upgrade', {})).data
 }

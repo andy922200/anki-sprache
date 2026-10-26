@@ -30,6 +30,7 @@ export interface UserSettingsDto {
   nativeLanguageCode: string
   cefrLevel: CEFR
   dailyNewCount: number
+  maxDueCards: number
   preferredLlmProvider: LlmProvider | null
   preferredLlmModel: string | null
   theme: ThemePref
@@ -90,20 +91,9 @@ export interface LogbookPage {
   nextCursor: string | null
 }
 
-export interface UpgradeResultSummaryDto {
-  completedAt: string
-  upgraded: number
-  skipped: number
-  failed: number
-  firstErrorReason: string | null
-}
-
 export interface GenerationStatusDto {
   done: boolean
   cardIds: string[]
   provider: LlmProvider | null
   lastError: string | null
-  upgradeInFlight: boolean
-  lastUpgradeError: string | null
-  lastUpgradeResult: UpgradeResultSummaryDto | null
 }
