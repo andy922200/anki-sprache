@@ -77,6 +77,22 @@ const POLL_INTERVAL_MS = 1500
 // running in the background; we tell the user to refresh rather than spin.
 const POLL_MAX_ATTEMPTS = 10
 
+const NO_NEW_WORDS_PREFIX = 'NO_NEW_WORDS:'
+
+function parseNoNewWords(lastError: string | null): string[] | null {
+  if (!lastError?.startsWith(NO_NEW_WORDS_PREFIX)) return null
+  return lastError.slice(NO_NEW_WORDS_PREFIX.length).split(',').filter(Boolean)
+}
+
+// Each retry is one more user-confirmed request, so this can't loop on its own.
+function confirmRetryNoNewWords(words: string[]): boolean {
+  return window.confirm(
+    words.length
+      ? t('dashboard.noNewWordsRetry', { words: words.join(', ') })
+      : t('dashboard.noNewWordsEmptyRetry'),
+  )
+}
+
 async function onGenerate(force = false) {
   if (force) {
     const ok = window.confirm(
@@ -85,6 +101,7 @@ async function onGenerate(force = false) {
     if (!ok) return
   }
   busy.value = true
+  let alreadyHadWords: string[] | null = null
   ui.beginBusy(t(force ? 'generation.regenerating' : 'generation.generating'))
   try {
     const res = await generationApi.generateToday({ force })
@@ -100,10 +117,14 @@ async function onGenerate(force = false) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
         finalStatus = await generationApi.getStatus()
         if (finalStatus.done) break
+        alreadyHadWords = parseNoNewWords(finalStatus.lastError)
+        if (alreadyHadWords) break
         if (finalStatus.lastError) observedTransientError = finalStatus.lastError
       }
       if (finalStatus?.done) {
         ui.toast('success', t('dashboard.generated', { count: finalStatus.cardIds.length }))
+      } else if (alreadyHadWords) {
+        // Asked about after the busy overlay is gone, below.
       } else if (observedTransientError || finalStatus?.lastError) {
         ui.toast(
           'error',
@@ -146,6 +167,7 @@ async function onGenerate(force = false) {
     busy.value = false
     ui.endBusy()
   }
+  if (alreadyHadWords && confirmRetryNoNewWords(alreadyHadWords)) await onGenerate(false)
 }
 
 function onStart(mode: 'FLIP' | 'MULTIPLE_CHOICE') {
@@ -160,6 +182,7 @@ function onPractice() {
 async function onGenerateMore() {
   const count = topUpCount.value
   busy.value = true
+  let alreadyHadWords: string[] | null = null
   ui.beginBusy(t('dashboard.generateMoreQueued'))
   try {
     await generationApi.generateMore(count)
@@ -175,8 +198,10 @@ async function onGenerateMore() {
         grew = true
         break
       }
+      alreadyHadWords = parseNoNewWords(s.lastError)
+      if (alreadyHadWords) break
     }
-    if (!grew) ui.toast('info', t('dashboard.generationStillRunning'))
+    if (!grew && !alreadyHadWords) ui.toast('info', t('dashboard.generationStillRunning'))
     await refresh()
   } catch (err) {
     if (axios.isAxiosError(err)) {
@@ -195,6 +220,7 @@ async function onGenerateMore() {
     busy.value = false
     ui.endBusy()
   }
+  if (alreadyHadWords && confirmRetryNoNewWords(alreadyHadWords)) await onGenerateMore()
 }
 </script>
 

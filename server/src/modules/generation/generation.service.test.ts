@@ -27,7 +27,9 @@ vi.mock('@/shared/llm/llmClient.js', () => ({
 }))
 vi.mock('@/shared/audio/pruneExamples.js', () => ({ pruneExamples: vi.fn() }))
 
-const { generateForUser, generateAdditionalForUser } = await import('./generation.service.js')
+const { generateForUser, generateAdditionalForUser, NoNewWordsError } = await import(
+  './generation.service.js'
+)
 
 // Lemmas that already exist as cards, and the id they resolve to.
 const EXISTING: Record<string, string> = { bom: 'removed-bom', livro: 'learned' }
@@ -161,6 +163,26 @@ describe('generateForUser', () => {
 
     expect(result.cardIds).toEqual(['new-casa'])
     expect(usage.map((u) => u.success)).toEqual([true, false])
+  })
+
+  it('fails with the rejected lemmas, and logs no deck, when every suggestion is already known', async () => {
+    script = [['livro'], ['livro']]
+    const { daily, logged } = setup()
+
+    const err = await daily().catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(NoNewWordsError)
+    expect((err as InstanceType<typeof NoNewWordsError>).rejectedLemmas).toEqual(['livro'])
+    expect(logged).toHaveLength(0)
+  })
+
+  it('fails with no lemmas when the LLM suggests nothing', async () => {
+    script = [[], []]
+    const { daily, logged } = setup()
+
+    const err = await daily().catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(NoNewWordsError)
+    expect((err as InstanceType<typeof NoNewWordsError>).rejectedLemmas).toEqual([])
+    expect(logged).toHaveLength(0)
   })
 
   it('fails when the first request fails', async () => {

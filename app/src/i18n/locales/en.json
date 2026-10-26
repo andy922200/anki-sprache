@@ -54,7 +54,9 @@
     "caughtUp": "🎉 You're caught up. Want extra practice?",
     "practiceAgain": "Practice today's words",
     "generateMore": "Generate {count} more",
-    "generateMoreQueued": "Generating more words…"
+    "generateMoreQueued": "Generating more words…",
+    "noNewWordsRetry": "The LLM only suggested words you already have: {words}\n\nTry again?",
+    "noNewWordsEmptyRetry": "The LLM didn't suggest any usable new words.\n\nTry again?"
   },
   "review": {
     "remaining": "{count} remaining",

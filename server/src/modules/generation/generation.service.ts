@@ -29,6 +29,16 @@ export interface GenerateResult {
 }
 
 const LOCK_TTL_SECONDS = 60
+export const NO_NEW_WORDS_TTL_SECONDS = 60 * 60
+
+/** The LLM answered, but nothing it suggested could be handed to this user. */
+export class NoNewWordsError extends Error {
+  constructor(readonly rejectedLemmas: string[]) {
+    super('LLM returned no new words for this user')
+  }
+}
+
+export const noNewWordsKey = (userId: string) => `gen:no-new-words:${userId}`
 
 export async function generateForUser(
   prisma: PrismaClient,
@@ -134,7 +144,7 @@ export async function generateForUser(
       }
       usedProvider = settings.preferredLlmProvider
 
-      await fillFromLlm(prisma, {
+      const rejected = await fillFromLlm(prisma, {
         userId,
         settings,
         provider: settings.preferredLlmProvider,
@@ -143,6 +153,8 @@ export async function generateForUser(
         skipCardIds: new Set([...existingStateIds, ...excludeCardIds]),
         avoidCardIds: excludeCardIds,
       })
+      // An empty log would make /generate/today answer "already-done" for the rest of the day.
+      if (selected.length === 0) throw new NoNewWordsError(rejected)
     }
 
     // 3. Create UserCardState (NEW) + DailyGenerationLog atomically
@@ -271,7 +283,7 @@ export async function generateAdditionalForUser(
       }
       usedProvider = settings.preferredLlmProvider
 
-      await fillFromLlm(prisma, {
+      const rejected = await fillFromLlm(prisma, {
         userId,
         settings,
         provider: settings.preferredLlmProvider,
@@ -280,6 +292,7 @@ export async function generateAdditionalForUser(
         skipCardIds: existingStateIds,
         avoidCardIds: [],
       })
+      if (selected.length === 0) throw new NoNewWordsError(rejected)
     }
 
     const addedCardIds = selected.map((c) => c.id).filter((id) => !existingLog.cardIds.includes(id))
@@ -335,9 +348,9 @@ interface FillFromLlmInput {
 /**
  * Tops `selected` up to `target` with LLM-suggested words. The prompt carries no
  * global word list; each suggestion is checked against the DB instead, and a single
- * follow-up request names the lemmas that were turned down.
+ * follow-up request names the lemmas that were turned down. Returns every lemma turned down.
  */
-async function fillFromLlm(prisma: PrismaClient, input: FillFromLlmInput): Promise<void> {
+async function fillFromLlm(prisma: PrismaClient, input: FillFromLlmInput): Promise<string[]> {
   const { userId, settings, selected, target, skipCardIds } = input
   const adapter = await getAdapterForUser(
     prisma,
@@ -355,16 +368,17 @@ async function fillFromLlm(prisma: PrismaClient, input: FillFromLlmInput): Promi
     avoidLemmas = avoided.map((c) => c.lemma)
   }
 
+  const allRejected = new Set<string>()
   for (const isFollowUp of [false, true]) {
     const needed = target - selected.length
-    if (needed <= 0) return
+    if (needed <= 0) break
 
     let items: WordItem[]
     try {
       items = await requestWords(prisma, adapter, { userId, settings, count: needed, avoidLemmas })
     } catch (err) {
       // A failed follow-up must not discard the cards the first round already secured.
-      if (isFollowUp && selected.length > 0) return
+      if (isFollowUp && selected.length > 0) break
       throw err
     }
 
@@ -382,6 +396,7 @@ async function fillFromLlm(prisma: PrismaClient, input: FillFromLlmInput): Promi
         (skipCardIds.has(existing.id) || selected.some((c) => c.id === existing.id))
       ) {
         rejected.push(item.lemma)
+        allRejected.add(item.lemma)
         continue
       }
       selected.push(
@@ -389,10 +404,11 @@ async function fillFromLlm(prisma: PrismaClient, input: FillFromLlmInput): Promi
           ? await backfillCard(prisma, settings, existing, item)
           : await createCard(prisma, settings, adapter.provider, item),
       )
-      if (selected.length >= target) return
+      if (selected.length >= target) return [...allRejected]
     }
     avoidLemmas = [...new Set([...avoidLemmas, ...rejected])]
   }
+  return [...allRejected]
 }
 
 async function requestWords(

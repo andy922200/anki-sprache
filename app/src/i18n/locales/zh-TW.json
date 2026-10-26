@@ -54,7 +54,9 @@
     "caughtUp": "🎉 今日已完成。想多練習嗎？",
     "practiceAgain": "重新練習今日單字",
     "generateMore": "追加 {count} 個新字",
-    "generateMoreQueued": "正在產生更多單字…"
+    "generateMoreQueued": "正在產生更多單字…",
+    "noNewWordsRetry": "LLM 這次提供的單字你都已經學過了：{words}\n\n要再試一次嗎？",
+    "noNewWordsEmptyRetry": "LLM 這次沒有提供可用的新單字。\n\n要再試一次嗎？"
   },
   "review": {
     "remaining": "還剩 {count} 張",

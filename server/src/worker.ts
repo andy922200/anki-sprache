@@ -1,4 +1,4 @@
-import { Queue, Worker, type Job } from 'bullmq'
+import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Redis } from 'ioredis'
 import pino from 'pino'
@@ -6,8 +6,11 @@ import { PrismaClient } from './generated/prisma/client.js'
 import { env, isDev } from './config/env.config.js'
 import { QUEUE_NAMES } from './shared/plugins/bullmq.plugin.js'
 import {
+  NO_NEW_WORDS_TTL_SECONDS,
+  NoNewWordsError,
   generateForUser,
   generateAdditionalForUser,
+  noNewWordsKey,
   type GenerateForUserInput,
 } from './modules/generation/generation.service.js'
 
@@ -33,32 +36,52 @@ async function main() {
 
   const userGenerationQueue = new Queue(QUEUE_NAMES.userGeneration, { connection })
 
+  async function runGenerationJob(job: Job<GenerationJobData>) {
+    const date = new Date(job.data.generationDate)
+    if (job.data.mode === 'ADDITIONAL') {
+      log.info(
+        { jobId: job.id, userId: job.data.userId, count: job.data.count },
+        'generateAdditionalForUser: start',
+      )
+      const result = await generateAdditionalForUser(prisma, redis, {
+        userId: job.data.userId,
+        generationDate: date,
+        count: job.data.count ?? 5,
+      })
+      log.info({ jobId: job.id, ...result }, 'generateAdditionalForUser: done')
+      return result
+    }
+    const input: GenerateForUserInput = {
+      userId: job.data.userId,
+      generationDate: date,
+      excludeCardIds: job.data.excludeCardIds,
+    }
+    log.info({ jobId: job.id, userId: input.userId }, 'generateForUser: start')
+    const result = await generateForUser(prisma, redis, input)
+    log.info({ jobId: job.id, ...result }, 'generateForUser: done')
+    return result
+  }
+
   const userGenerationWorker = new Worker<GenerationJobData>(
     QUEUE_NAMES.userGeneration,
     async (job: Job<GenerationJobData>) => {
-      const date = new Date(job.data.generationDate)
-      if (job.data.mode === 'ADDITIONAL') {
-        log.info(
-          { jobId: job.id, userId: job.data.userId, count: job.data.count },
-          'generateAdditionalForUser: start',
+      try {
+        return await runGenerationJob(job)
+      } catch (err) {
+        if (!(err instanceof NoNewWordsError)) throw err
+        log.warn(
+          { jobId: job.id, userId: job.data.userId, rejectedLemmas: err.rejectedLemmas },
+          'generation: LLM returned only words the user already has',
         )
-        const result = await generateAdditionalForUser(prisma, redis, {
-          userId: job.data.userId,
-          generationDate: date,
-          count: job.data.count ?? 5,
-        })
-        log.info({ jobId: job.id, ...result }, 'generateAdditionalForUser: done')
-        return result
+        await redis.set(
+          noNewWordsKey(job.data.userId),
+          JSON.stringify(err.rejectedLemmas),
+          'EX',
+          NO_NEW_WORDS_TTL_SECONDS,
+        )
+        // Retrying would just ask the same LLM again; the user decides whether to try once more.
+        throw new UnrecoverableError(err.message)
       }
-      const input: GenerateForUserInput = {
-        userId: job.data.userId,
-        generationDate: date,
-        excludeCardIds: job.data.excludeCardIds,
-      }
-      log.info({ jobId: job.id, userId: input.userId }, 'generateForUser: start')
-      const result = await generateForUser(prisma, redis, input)
-      log.info({ jobId: job.id, ...result }, 'generateForUser: done')
-      return result
     },
     { connection, concurrency: 4 },
   )

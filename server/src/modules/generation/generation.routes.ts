@@ -6,6 +6,7 @@ import { QUEUE_NAMES } from '@/shared/plugins/bullmq.plugin.js'
 import { MAX_DAILY_NEW_COUNT } from '@/config/limits.config.js'
 import { RATE_LIMITS } from '@/config/rate-limit.config.js'
 import { llmProviderSchema } from '@/shared/schemas/enums.js'
+import { noNewWordsKey } from './generation.service.js'
 
 /**
  * True if the user has a user-generation job currently queued, active, or
@@ -143,6 +144,7 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
       // which would silently swallow retries after a previous failure.
       // Idempotency is enforced in generation.service.ts via the
       // DailyGenerationLog unique constraint + Redis lock.
+      await app.redis.del(noNewWordsKey(userId))
       const job = await app.queues.userGeneration.add('generateForUser', {
         userId,
         generationDate: today.toISOString(),
@@ -185,12 +187,17 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
         },
       })
 
+      const noNewWords = await app.redis.get(noNewWordsKey(userId))
+      const noNewWordsError = noNewWords
+        ? `NO_NEW_WORDS:${(JSON.parse(noNewWords) as string[]).join(',')}`
+        : null
+
       if (log) {
         return {
           done: true,
           cardIds: log.cardIds,
           provider: log.provider,
-          lastError: null,
+          lastError: noNewWordsError,
         }
       }
 
@@ -205,6 +212,10 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
           provider: null,
           lastError: null,
         }
+      }
+
+      if (noNewWordsError) {
+        return { done: false, cardIds: [], provider: null, lastError: noNewWordsError }
       }
 
       // Not yet done AND no job in flight — surface the most recent failed
@@ -268,6 +279,7 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
         throw app.httpErrors.badRequest('NO_DAILY_DECK')
       }
 
+      await app.redis.del(noNewWordsKey(userId))
       const job = await app.queues.userGeneration.add('generateMoreForUser', {
         userId,
         generationDate: today.toISOString(),
