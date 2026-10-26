@@ -371,6 +371,7 @@ pnpm --filter ./server test:watch      # 後端 watch 模式
 | `POST /generate/today` | prod 5/hr、dev 60/hr | `userId:provider:model` |
 | `POST /generate/more` | prod 10/hr、dev 60/hr | `userId:provider:model` |
 | `POST /cards/:id/examples/ensure` | prod 30/hr、dev 120/hr | `userId`（預設 key） |
+| `POST /generate/more`（`fillShortfall: true`） | 每天最多 3 次（`MAX_DAILY_TOP_UPS`，超過回 409） | `userId` + 日期（Redis 計數） |
 
 > 上表數值集中在 `server/src/config/rate-limit.config.ts` 的 `RATE_LIMITS`；產品限制（每日新字上限、待複習上限、例句數等）在 `limits.config.ts`。調整時只改這兩個檔案，並同步本表。
 
@@ -466,6 +467,12 @@ pnpm --filter ./server test:watch      # 後端 watch 模式
 - **BullMQ Queue**：新增佇列於 `shared/plugins/bullmq.plugin.ts` 註冊；生成類任務必搭 Redis 鎖（`SET ... NX`）避免同 `userId + date` 重複執行。
 - **LLM 呼叫**：統一透過 `shared/llm/llmClient.ts` 工廠 + `retry.ts` 指數退避，prompt 放 `shared/llm/prompts/`；每次呼叫都必須寫入 `LlmUsageLog`（成功 / 失敗皆是）。
 - **Prisma Client 實例化**：Prisma 7 強制使用 driver adapter。**所有** `new PrismaClient()` 呼叫（`prisma.plugin.ts`、`worker.ts`、`prisma/seed.ts`）都必須傳入 `new PrismaPg({ connectionString: ... })`，且 `DATABASE_URL` 來源是 `prisma.config.ts`（migrate / seed）或 `env.DATABASE_URL`（runtime）。
+- **每日單字生成**（`generation.service.ts`；改動時守住以下順序與不變量）：
+  - 順序：今天已有 `DailyGenerationLog` 就直接回傳 → 先 `pickRandomCards` 從全站詞庫挑（排除使用者已有的卡，且須已有其母語翻譯與例句；上限為 `dailyNewCount`，追加則為 `count`）→ 不足才呼叫 LLM（`fillFromLlm`，最多兩輪）。
+  - LLM 提的字只在「使用者自己已有」時才被拒；全站已有但使用者沒有的字會沿用並補翻譯 / 例句（`backfillCard`）。prompt 不帶詞庫，靠事後比對。
+  - 一張都湊不到須丟 `NoNewWordsError` 且**不寫空的今日記錄**（否則今天會被誤判為已完成）；worker 以 `UnrecoverableError` 不自動重試。
+  - 湊不滿的補足：前端確認後走 `POST /generate/more` 帶 `fillShortfall: true`，每天最多 `MAX_DAILY_TOP_UPS` 次（`limits.config.ts`），超過回 409 `TOP_UP_LIMIT`；一般的「追加」不計入。
+  - Redis key（皆為短期暫存）：`gen:no-new-words:<userId>`（1 小時，供 UI 詢問重試，每次請求前清除）、`gen:rejected-lemmas:<userId>`（24 小時，被拒的字，下次請求自動帶入 prompt 避開，最多 `MAX_AVOID_LEMMAS` 個）、`gen:top-ups:<userId>:<date>`（補足次數）、`gen:short-streak:<userId>`（連續湊不滿次數，達 `SHORT_STREAK_HINT_THRESHOLD` 時 `/generate/status` 回 `suggestHigherLevel`，Dashboard 提示調高 CEFR）。
 - **快取**：`/cards/due` 有 60 秒 Redis 快取、`/cards/:id` 用 ETag；`POST /reviews` 成功後必須走既有的 invalidation（key 樣板 `cards:due:<userId>:*`）。
 
 ### 絕對不要做

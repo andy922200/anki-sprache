@@ -9,7 +9,7 @@
 ## ✨ 核心特色
 
 - **FSRS 排程**：以 `ts-fsrs` 實作的現代間隔重複演算法，取代傳統 SM-2。
-- **BYOK LLM 生成**：自行提供 OpenAI / Anthropic Claude / Google Gemini API Key，伺服器以 AES-256-GCM 加密儲存；每日依你的時區於當地 04:00 自動生成新卡。
+- **BYOK LLM 生成**：自行提供 OpenAI / Anthropic Claude / Google Gemini API Key，伺服器以 AES-256-GCM 加密儲存；每日依你的時區於當地 04:00 自動生成新卡，並優先沿用全站已有的單字，不足才呼叫 LLM。
 - **多母語翻譯**：同一張單字卡可同時帶多種母語翻譯，介面會依使用者設定挑選。
 - **Google 登入**：前端走 Google Identity Services，後端驗 ID Token 後簽發 JWT（access + refresh rotation，refresh token 僅存於 httpOnly cookie）。
 - **FLIP 與選擇題雙模式**：支援傳統翻牌複習與 4 選 1 模式，也有不計入 FSRS 的 Practice 模式。
