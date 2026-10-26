@@ -3,7 +3,7 @@ import {
   hasZodFastifySchemaValidationErrors,
   isResponseSerializationError,
 } from 'fastify-type-provider-zod'
-import { isDev } from '@/config/env.js'
+import { isDev } from '@/config/env.config.js'
 
 export default fp(async (app) => {
   app.setErrorHandler((error, req, reply) => {

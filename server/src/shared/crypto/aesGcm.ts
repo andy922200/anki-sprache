@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'node:crypto'
-import { env } from '@/config/env.js'
+import { env } from '@/config/env.config.js'
 
 const ALGO = 'aes-256-gcm'
 const IV_LEN = 12

@@ -16,9 +16,7 @@ const envSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
   // 'none' is required when frontend & backend are on different sites
-  // (e.g. *.zeabur.app subdomains, which sit on the public suffix list and
-  // count as cross-site). Browsers enforce that sameSite=none also be
-  // secure, so production must pair this with COOKIE_SECURE=true.
+  // Browsers enforce that sameSite=none also be secure, so production must pair this with COOKIE_SECURE=true.
   COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
 
   JWT_ACCESS_SECRET: z.string().min(32),

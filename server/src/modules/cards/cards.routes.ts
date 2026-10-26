@@ -1,23 +1,14 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
-import { ensureAudio } from '@/modules/audio/audio.service.js'
-import { isDev } from '@/config/env.js'
-
-const CEFR = z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2'])
-const FsrsState = z.enum(['NEW', 'LEARNING', 'REVIEW', 'RELEARNING'])
-const PartOfSpeech = z.enum([
-  'NOUN',
-  'VERB',
-  'ADJECTIVE',
-  'ADVERB',
-  'PRONOUN',
-  'PREPOSITION',
-  'CONJUNCTION',
-  'ARTICLE',
-  'INTERJECTION',
-  'NUMERAL',
-])
-const Gender = z.enum(['DER', 'DIE', 'DAS', 'MASCULINE', 'FEMININE'])
+import { RATE_LIMITS } from '@/config/rate-limit.config.js'
+import type { CEFR as CefrLevel, Prisma } from '@/generated/prisma/client.js'
+import { ensureCardExamples } from './cards.service.js'
+import {
+  cefrSchema,
+  fsrsStateSchema,
+  genderSchema,
+  partOfSpeechSchema,
+} from '@/shared/schemas/enums.js'
 
 const exampleDto = z.object({
   id: z.string(),
@@ -32,27 +23,71 @@ const cardDto = z.object({
   languageCode: z.string(),
   lemma: z.string(),
   surfaceForm: z.string().nullable(),
-  partOfSpeech: PartOfSpeech.nullable(),
-  gender: Gender.nullable(),
+  partOfSpeech: partOfSpeechSchema.nullable(),
+  gender: genderSchema.nullable(),
   ipa: z.string().nullable(),
   translation: z.string(),
-  cefrLevel: CEFR,
+  cefrLevel: cefrSchema,
   audioUrl: z.url().nullable(),
   examples: z.array(exampleDto),
   state: z
     .object({
       due: z.string(),
-      state: FsrsState,
+      state: fsrsStateSchema,
       reps: z.number(),
       lapses: z.number(),
     })
     .nullable(),
 })
 
-const audioResponse = z.object({ audioUrl: z.url() })
-const AUDIO_RATE_LIMIT = { max: isDev ? 200 : 60, timeWindow: '1 hour' } as const
 
 const DUE_CACHE_TTL = 60
+
+const cardInclude = (native: string, cefrLevel: CefrLevel) =>
+  ({
+    translations: { where: { nativeLanguageCode: native } },
+    examples: {
+      where: { cefrLevel },
+      orderBy: { orderIndex: 'asc' },
+      include: { translations: { where: { nativeLanguageCode: native } } },
+    },
+  }) satisfies Prisma.VocabularyCardInclude
+
+type CardWithRelations = Prisma.VocabularyCardGetPayload<{
+  include: ReturnType<typeof cardInclude>
+}>
+
+interface CardStateRow {
+  due: Date
+  state: z.infer<typeof fsrsStateSchema>
+  reps: number
+  lapses: number
+}
+
+function toCardDto(card: CardWithRelations, state: CardStateRow | null): z.infer<typeof cardDto> {
+  return {
+    id: card.id,
+    languageCode: card.languageCode,
+    lemma: card.lemma,
+    surfaceForm: card.surfaceForm,
+    partOfSpeech: card.partOfSpeech,
+    gender: card.gender,
+    ipa: card.ipa,
+    translation: card.translations[0]?.translation ?? '',
+    cefrLevel: card.cefrLevel,
+    audioUrl: card.audioUrl,
+    examples: card.examples.map((e) => ({
+      id: e.id,
+      text: e.text,
+      translation: e.translations[0]?.translation ?? '',
+      audioUrl: e.audioUrl,
+      orderIndex: e.orderIndex,
+    })),
+    state: state
+      ? { due: state.due.toISOString(), state: state.state, reps: state.reps, lapses: state.lapses }
+      : null,
+  }
+}
 
 export const cardsRoutes: FastifyPluginAsyncZod = async (app) => {
   app.addHook('preHandler', app.authenticate)
@@ -87,67 +122,10 @@ export const cardsRoutes: FastifyPluginAsyncZod = async (app) => {
 
       const states = await app.prisma.userCardState.findMany({
         where: { userId, cardId: { in: log.cardIds } },
-        include: {
-          card: {
-            include: {
-              translations: { where: { nativeLanguageCode: native } },
-              examples: {
-                where: { cefrLevel: userSettings.cefrLevel },
-                orderBy: { orderIndex: 'asc' },
-                include: { translations: { where: { nativeLanguageCode: native } } },
-              },
-            },
-          },
-        },
+        include: { card: { include: cardInclude(native, userSettings.cefrLevel) } },
       })
 
-      // Fallback: if a card has no examples at the user's current CEFR level
-      // (e.g. they changed level after learning it), load any examples so the
-      // learner isn't shown a blank card while waiting for an upgrade job.
-      const cardsMissingExamples = states
-        .filter((s) => s.card.examples.length === 0)
-        .map((s) => s.card.id)
-      const fallbackExamples: Record<string, typeof states[number]['card']['examples']> = {}
-      if (cardsMissingExamples.length) {
-        const rows = await app.prisma.exampleSentence.findMany({
-          where: { cardId: { in: cardsMissingExamples } },
-          orderBy: { orderIndex: 'asc' },
-          include: { translations: { where: { nativeLanguageCode: native } } },
-        })
-        for (const r of rows) {
-          fallbackExamples[r.cardId] ??= []
-          fallbackExamples[r.cardId]!.push(r)
-        }
-      }
-
-      return states.map((s) => {
-        const exs = s.card.examples.length > 0 ? s.card.examples : fallbackExamples[s.card.id] ?? []
-        return {
-          id: s.card.id,
-          languageCode: s.card.languageCode,
-          lemma: s.card.lemma,
-          surfaceForm: s.card.surfaceForm,
-          partOfSpeech: s.card.partOfSpeech,
-          gender: s.card.gender,
-          ipa: s.card.ipa,
-          translation: s.card.translations[0]?.translation ?? '',
-          cefrLevel: s.card.cefrLevel,
-          audioUrl: s.card.audioUrl,
-          examples: exs.map((e) => ({
-            id: e.id,
-            text: e.text,
-            translation: e.translations[0]?.translation ?? '',
-            audioUrl: e.audioUrl,
-            orderIndex: e.orderIndex,
-          })),
-          state: {
-            due: s.due.toISOString(),
-            state: s.state,
-            reps: s.reps,
-            lapses: s.lapses,
-          },
-        }
-      })
+      return states.map((s) => toCardDto(s.card, s))
     },
   )
 
@@ -155,7 +133,6 @@ export const cardsRoutes: FastifyPluginAsyncZod = async (app) => {
     '/due',
     {
       schema: {
-        querystring: z.object({ limit: z.coerce.number().int().min(1).max(100).default(50) }),
         response: { 200: z.array(cardDto) },
       },
     },
@@ -163,11 +140,16 @@ export const cardsRoutes: FastifyPluginAsyncZod = async (app) => {
       const userId = req.user!.userId
       const userSettings = await app.prisma.userSettings.findUniqueOrThrow({
         where: { userId },
-        select: { cefrLevel: true, nativeLanguageCode: true, targetLanguageCode: true },
+        select: {
+          cefrLevel: true,
+          nativeLanguageCode: true,
+          targetLanguageCode: true,
+          maxDueCards: true,
+        },
       })
       const native = userSettings.nativeLanguageCode
       const target = userSettings.targetLanguageCode
-      const cacheKey = `cards:due:${userId}:${target}:${userSettings.cefrLevel}:${native}:${req.query.limit}`
+      const cacheKey = `cards:due:${userId}:${target}:${userSettings.cefrLevel}:${native}:${userSettings.maxDueCards}`
       const cached = await app.redis.get(cacheKey)
       if (cached) {
         reply.header('X-Cache', 'HIT')
@@ -178,65 +160,11 @@ export const cardsRoutes: FastifyPluginAsyncZod = async (app) => {
       const states = await app.prisma.userCardState.findMany({
         where: { userId, due: { lte: now }, card: { is: { languageCode: target } } },
         orderBy: [{ due: 'asc' }],
-        take: req.query.limit,
-        include: {
-          card: {
-            include: {
-              translations: { where: { nativeLanguageCode: native } },
-              examples: {
-                where: { cefrLevel: userSettings.cefrLevel },
-                orderBy: { orderIndex: 'asc' },
-                include: { translations: { where: { nativeLanguageCode: native } } },
-              },
-            },
-          },
-        },
+        take: userSettings.maxDueCards,
+        include: { card: { include: cardInclude(native, userSettings.cefrLevel) } },
       })
 
-      // Fallback: if a card has no examples at the user's current CEFR level
-      // (e.g. they changed level after learning it), load any examples.
-      const cardsMissingExamples = states.filter((s) => s.card.examples.length === 0).map((s) => s.card.id)
-      const fallbackExamples: Record<string, typeof states[number]['card']['examples']> = {}
-      if (cardsMissingExamples.length) {
-        const rows = await app.prisma.exampleSentence.findMany({
-          where: { cardId: { in: cardsMissingExamples } },
-          orderBy: { orderIndex: 'asc' },
-          include: { translations: { where: { nativeLanguageCode: native } } },
-        })
-        for (const r of rows) {
-          fallbackExamples[r.cardId] ??= []
-          fallbackExamples[r.cardId]!.push(r)
-        }
-      }
-
-      const result = states.map((s) => {
-        const exs = s.card.examples.length > 0 ? s.card.examples : fallbackExamples[s.card.id] ?? []
-        return {
-          id: s.card.id,
-          languageCode: s.card.languageCode,
-          lemma: s.card.lemma,
-          surfaceForm: s.card.surfaceForm,
-          partOfSpeech: s.card.partOfSpeech,
-          gender: s.card.gender,
-          ipa: s.card.ipa,
-          translation: s.card.translations[0]?.translation ?? '',
-          cefrLevel: s.card.cefrLevel,
-          audioUrl: s.card.audioUrl,
-          examples: exs.map((e) => ({
-            id: e.id,
-            text: e.text,
-            translation: e.translations[0]?.translation ?? '',
-            audioUrl: e.audioUrl,
-            orderIndex: e.orderIndex,
-          })),
-          state: {
-            due: s.due.toISOString(),
-            state: s.state,
-            reps: s.reps,
-            lapses: s.lapses,
-          },
-        }
-      })
+      const result = states.map((s) => toCardDto(s.card, s))
 
       await app.redis.setex(cacheKey, DUE_CACHE_TTL, JSON.stringify(result))
       reply.header('X-Cache', 'MISS')
@@ -262,25 +190,9 @@ export const cardsRoutes: FastifyPluginAsyncZod = async (app) => {
 
       const card = await app.prisma.vocabularyCard.findUnique({
         where: { id: req.params.id },
-        include: {
-          translations: { where: { nativeLanguageCode: native } },
-          examples: {
-            where: { cefrLevel: userSettings.cefrLevel },
-            orderBy: { orderIndex: 'asc' },
-            include: { translations: { where: { nativeLanguageCode: native } } },
-          },
-        },
+        include: cardInclude(native, userSettings.cefrLevel),
       })
       if (!card) throw app.httpErrors.notFound('Card not found')
-
-      let examples = card.examples
-      if (examples.length === 0) {
-        examples = await app.prisma.exampleSentence.findMany({
-          where: { cardId: card.id },
-          orderBy: { orderIndex: 'asc' },
-          include: { translations: { where: { nativeLanguageCode: native } } },
-        })
-      }
 
       const state = await app.prisma.userCardState.findUnique({
         where: { userId_cardId: { userId, cardId: card.id } },
@@ -292,63 +204,44 @@ export const cardsRoutes: FastifyPluginAsyncZod = async (app) => {
       }
       reply.header('etag', etag)
 
-      return {
-        id: card.id,
-        languageCode: card.languageCode,
-        lemma: card.lemma,
-        surfaceForm: card.surfaceForm,
-        partOfSpeech: card.partOfSpeech,
-        gender: card.gender,
-        ipa: card.ipa,
-        translation: card.translations[0]?.translation ?? '',
-        cefrLevel: card.cefrLevel,
-        audioUrl: card.audioUrl,
-        examples: examples.map((e) => ({
-          id: e.id,
-          text: e.text,
-          translation: e.translations[0]?.translation ?? '',
-          audioUrl: e.audioUrl,
-          orderIndex: e.orderIndex,
-        })),
-        state: state
-          ? {
-              due: state.due.toISOString(),
-              state: state.state,
-              reps: state.reps,
-              lapses: state.lapses,
-            }
-          : null,
+      return toCardDto(card, state)
+    },
+  )
+
+  app.post(
+    '/:id/examples/ensure',
+    {
+      config: { rateLimit: RATE_LIMITS.examplesEnsure },
+      schema: {
+        params: z.object({ id: z.string() }),
+        response: { 200: cardDto },
+      },
+    },
+    async (req) => {
+      const userId = req.user!.userId
+      const settings = await app.prisma.userSettings.findUniqueOrThrow({
+        where: { userId },
+        select: { cefrLevel: true, nativeLanguageCode: true, targetLanguageCode: true },
+      })
+      const card = await app.prisma.vocabularyCard.findUnique({
+        where: { id: req.params.id },
+        select: { languageCode: true },
+      })
+      if (!card) throw app.httpErrors.notFound('Card not found')
+      if (card.languageCode !== settings.targetLanguageCode) {
+        throw app.httpErrors.badRequest('Card is not in your target language')
       }
-    },
-  )
 
-  app.post(
-    '/:cardId/lemma/audio',
-    {
-      config: { rateLimit: AUDIO_RATE_LIMIT },
-      schema: {
-        params: z.object({ cardId: z.string() }),
-        response: { 200: audioResponse },
-      },
-    },
-    async (req) => {
-      const audioUrl = await ensureAudio(app.prisma, app.redis, 'lemma', req.params.cardId)
-      return { audioUrl }
-    },
-  )
+      await ensureCardExamples(app.prisma, app.redis, userId, req.params.id)
 
-  app.post(
-    '/:cardId/examples/:exampleId/audio',
-    {
-      config: { rateLimit: AUDIO_RATE_LIMIT },
-      schema: {
-        params: z.object({ cardId: z.string(), exampleId: z.string() }),
-        response: { 200: audioResponse },
-      },
-    },
-    async (req) => {
-      const audioUrl = await ensureAudio(app.prisma, app.redis, 'example', req.params.exampleId)
-      return { audioUrl }
+      const fresh = await app.prisma.vocabularyCard.findUniqueOrThrow({
+        where: { id: req.params.id },
+        include: cardInclude(settings.nativeLanguageCode, settings.cefrLevel),
+      })
+      const state = await app.prisma.userCardState.findUnique({
+        where: { userId_cardId: { userId, cardId: fresh.id } },
+      })
+      return toCardDto(fresh, state)
     },
   )
 }

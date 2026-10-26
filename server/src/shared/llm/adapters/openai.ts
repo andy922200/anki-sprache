@@ -8,16 +8,18 @@ export function createOpenAIAdapter(apiKey: string, model = 'gpt-4o-mini'): LlmA
     provider: 'OPENAI',
     model,
     async complete(input: LlmCompletionInput): Promise<LlmCompletionOutput> {
-      const res = await retryable(() =>
-        client.chat.completions.create({
-          model,
-          response_format: { type: 'json_object' },
-          temperature: 0.5,
-          messages: [
-            { role: 'system', content: input.system },
-            { role: 'user', content: input.user },
-          ],
-        }),
+      const res = await retryable(
+        () =>
+          client.chat.completions.create({
+            model,
+            response_format: { type: 'json_object' },
+            temperature: 0.5,
+            messages: [
+              { role: 'system', content: input.system },
+              { role: 'user', content: input.user },
+            ],
+          }),
+        { attempts: input.attempts },
       )
       const content = res.choices[0]?.message?.content ?? ''
       return {

@@ -3,20 +3,20 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { Redis } from 'ioredis'
 import pino from 'pino'
 import { PrismaClient } from './generated/prisma/client.js'
-import { env, isDev } from './config/env.js'
+import { env, isDev } from './config/env.config.js'
 import { QUEUE_NAMES } from './shared/plugins/bullmq.plugin.js'
 import {
   generateForUser,
   generateAdditionalForUser,
-  upgradeExamplesForUser,
   type GenerateForUserInput,
 } from './modules/generation/generation.service.js'
 
 interface GenerationJobData {
   userId: string
   generationDate: string
-  mode?: 'DAILY' | 'ADDITIONAL' | 'UPGRADE_EXAMPLES'
+  mode?: 'DAILY' | 'ADDITIONAL'
   count?: number
+  excludeCardIds?: string[]
 }
 
 const log = pino({
@@ -50,28 +50,10 @@ async function main() {
         log.info({ jobId: job.id, ...result }, 'generateAdditionalForUser: done')
         return result
       }
-      if (job.data.mode === 'UPGRADE_EXAMPLES') {
-        log.info(
-          { jobId: job.id, userId: job.data.userId },
-          'upgradeExamplesForUser: start',
-        )
-        const result = await upgradeExamplesForUser(prisma, redis, {
-          userId: job.data.userId,
-        })
-        log.info(
-          {
-            jobId: job.id,
-            upgraded: result.upgradedCardIds.length,
-            skipped: result.skipped,
-            failed: result.failed.length,
-          },
-          'upgradeExamplesForUser: done',
-        )
-        return result
-      }
       const input: GenerateForUserInput = {
         userId: job.data.userId,
         generationDate: date,
+        excludeCardIds: job.data.excludeCardIds,
       }
       log.info({ jobId: job.id, userId: input.userId }, 'generateForUser: start')
       const result = await generateForUser(prisma, redis, input)

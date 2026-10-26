@@ -1,6 +1,6 @@
 import fp from 'fastify-plugin'
 import { Queue } from 'bullmq'
-import { env } from '@/config/env.js'
+import { env } from '@/config/env.config.js'
 
 export const QUEUE_NAMES = {
   userGeneration: 'user-generation',

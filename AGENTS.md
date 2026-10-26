@@ -65,14 +65,17 @@ anki-sprache/
 │   │   ├── app.ts          # Fastify builder（plugin + route 註冊）
 │   │   ├── index.ts        # HTTP 入口
 │   │   ├── worker.ts       # BullMQ worker 入口
-│   │   ├── config/env.ts   # Zod 校驗的環境變數
+│   │   ├── config/         # env.config.ts（Zod 校驗的環境變數）、limits.config.ts（產品限制常數）、rate-limit.config.ts（速率限制）
 │   │   ├── generated/      # `prisma generate` 產物（gitignored，build 時自動產生）
 │   │   ├── modules/        # auth / users / settings / llmKeys / languages / cards / reviews / generation
 │   │   └── shared/
+│   │       ├── audio/pruneExamples.ts   # 裁剪例句並清理 R2 音檔（cards / generation 共用）
 │   │       ├── crypto/aesGcm.ts
 │   │       ├── fsrs/scheduler.ts
 │   │       ├── llm/        # adapters + prompts + retry
-│   │       └── plugins/    # auth / prisma / redis / bullmq / errorHandler
+│   │       ├── plugins/    # auth / prisma / redis / bullmq / errorHandler
+│   │       ├── schemas/    # enums.ts：由 Prisma enum 建立的共用 Zod schema
+│   │       └── types/      # fastify.d.ts：FastifyInstance / FastifyRequest 型別擴充
 │   └── prisma/             # schema.prisma、seed.ts、migrations/
 ├── docker-compose.yml      # dev 用 postgres + redis
 ├── deploy/                 # 正式環境 compose + 每日備份腳本
@@ -367,7 +370,9 @@ pnpm --filter ./server test:watch      # 後端 watch 模式
 | `POST /reviews` | 120 req/min | `userId` |
 | `POST /generate/today` | prod 5/hr、dev 60/hr | `userId:provider:model` |
 | `POST /generate/more` | prod 10/hr、dev 60/hr | `userId:provider:model` |
-| `POST /generate/examples/upgrade` | prod 5/hr、dev 60/hr | `userId:provider:model` |
+| `POST /cards/:id/examples/ensure` | prod 30/hr、dev 120/hr | `userId`（預設 key） |
+
+> 上表數值集中在 `server/src/config/rate-limit.config.ts` 的 `RATE_LIMITS`；產品限制（每日新字上限、待複習上限、例句數等）在 `limits.config.ts`。調整時只改這兩個檔案，並同步本表。
 
 > `/generate/*` 以 `provider:model` 作 bucket 尾綴，使用者切換偏好 LLM 後會拿到獨立的配額，不會因為先前模型用盡而共用限流。
 
@@ -423,8 +428,9 @@ pnpm --filter ./server test:watch      # 後端 watch 模式
 | DELETE | `/me/llm-keys/:provider` | ✅ | — | — |
 | GET | `/languages` | ✅ | — | 可用語言清單 |
 | GET | `/cards/today` | ✅ | — | 當日卡組（無論是否到期） |
-| GET | `/cards/due` | ✅ | — | 到期卡；60 秒 Redis 快取 |
+| GET | `/cards/due` | ✅ | — | 到期卡，上限為 `UserSettings.maxDueCards`；60 秒 Redis 快取 |
 | GET | `/cards/:id` | ✅ | — | 單卡，支援 ETag 304 |
+| POST | `/cards/:id/examples/ensure` | ✅ | prod 30/hr、dev 120/hr | 即時補齊該卡在使用者 CEFR + 母語下缺的例句／翻譯；用請求者自己的 BYOK，LLM 失敗回 424（`LLM_RATE_LIMITED` 等） |
 | POST | `/reviews` | ✅ | 120/min | 寫入後失效快取 |
 | GET | `/reviews/logbook` | ✅ | — | Cursor 分頁，支援 rating / mode 篩選 |
 | POST | `/generate/today` | ✅ | prod 5/hr、dev 60/hr | 202 Accepted 或 200（已完成） |
@@ -440,6 +446,10 @@ pnpm --filter ./server test:watch      # 後端 watch 模式
 ### 新增功能的既定路徑
 
 - **新增後端路由**：於 `server/src/modules/<domain>/` 建立 `*.routes.ts` + `*.service.ts` + `*.schema.ts`（Zod），並在 `server/src/app.ts` 統一註冊；務必附 response schema 以讓 `/docs` 自動生成正確。
+- **後端模組定義**：`server/src/modules/<name>/` 是一個領域模組，對應 `app.ts` 註冊的**一組路由前綴**；前綴只在 `app.ts` 設定，模組內部路由寫相對路徑。
+  - 模組檔案：`*.routes.ts`（HTTP + Zod）、`*.service.ts`（不依賴 HTTP 的邏輯，供路由與 worker 共用）、必要時 `*.schema.ts`。
+  - 模組之間不互相 import，沒有例外；跨模組共用的邏輯放 `shared/`（例如 `cards`、`generation` 共用的 `shared/audio/pruneExamples.ts`）。
+  - 列舉 schema 一律從 `shared/schemas/enums.ts` 匯入；數值型限制放 `config/limits.config.ts` 與 `config/rate-limit.config.ts`。
 - **新增前端頁面**：在 `app/src/pages/` 建立 `*.vue`，在 `router/index.ts` 加入路由；需要導航時同步更新 `components/layout/AppHeader.vue`。
 - **新增 Pinia Store**：命名 `*.store.ts`，放 `app/src/stores/`，採 **Options Store** 風格 `defineStore('id', { state: () => ({ ... }), getters: { ... }, actions: { ... } })`：
   - `state`、actions 名稱沿用 camelCase；**`getters` 一律 UPPER_SNAKE_CASE**（如 `IS_AUTHENTICATED`、`CURRENT`），便於與 state / actions 一眼區分。
@@ -560,7 +570,7 @@ pnpm --filter ./server test:watch      # 後端 watch 模式
 
 - **Google OAuth 本機測試**：先至 Google Cloud Console 把 `http://localhost:5173` 加入 Authorized JavaScript Origins。
 - **Schema 守門**：後端所有路由必有 Zod schema；改 schema 務必確認 `/docs`（Swagger）仍能正確序列化。
-- **秘密使用**：`MASTER_KEY`、`JWT_*_SECRET`、`GOOGLE_CLIENT_ID` 一律以 env 讀取（經 `config/env.ts` 校驗）；範例 / 文件一律使用 `change-me-*` 占位。
+- **秘密使用**：`MASTER_KEY`、`JWT_*_SECRET`、`GOOGLE_CLIENT_ID` 一律以 env 讀取（經 `config/env.config.ts` 校驗）；範例 / 文件一律使用 `change-me-*` 占位。
 - **時區**：FSRS 排程、每日生成 fan-out 皆以使用者 `timezone` 為準；新增時區相關邏輯請使用 `Intl.DateTimeFormat` 或既有的工具函式，勿用裸 `new Date()` 做日界。
 - **多母語**：生成或顯示翻譯時必經 `CardTranslation` / `ExampleSentenceTranslation` 按使用者 `nativeLanguageCode` 挑選，不可假設 `en`。
 

@@ -16,11 +16,13 @@ export function createGoogleAdapter(apiKey: string, model = 'gemini-2.5-flash'):
     provider: 'GOOGLE',
     model,
     async complete(input: LlmCompletionInput): Promise<LlmCompletionOutput> {
-      const res = await retryable(() =>
-        generativeModel.generateContent({
-          contents: [{ role: 'user', parts: [{ text: input.user }] }],
-          systemInstruction: { role: 'system', parts: [{ text: input.system }] },
-        }),
+      const res = await retryable(
+        () =>
+          generativeModel.generateContent({
+            contents: [{ role: 'user', parts: [{ text: input.user }] }],
+            systemInstruction: { role: 'system', parts: [{ text: input.system }] },
+          }),
+        { attempts: input.attempts },
       )
       const content = res.response.text()
       const usage = res.response.usageMetadata

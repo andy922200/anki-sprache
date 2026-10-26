@@ -1,6 +1,6 @@
 import fp from 'fastify-plugin'
 import jwt from 'jsonwebtoken'
-import { env } from '@/config/env.js'
+import { env } from '@/config/env.config.js'
 
 interface AccessTokenPayload {
   userId: string

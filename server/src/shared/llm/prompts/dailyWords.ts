@@ -1,8 +1,13 @@
 import { z } from 'zod'
+import {
+  EXAMPLES_PER_LEVEL_MAX,
+  EXAMPLES_PER_LEVEL_TARGET,
+  SENTENCE_MAX_LENGTH,
+} from '@/config/limits.config.js'
+import type { Gender } from '@/generated/prisma/enums.js'
+import { genderSchema, partOfSpeechSchema } from '@/shared/schemas/enums.js'
 
-// Mirrors the Prisma Gender enum. German stores its article as the value;
-// Romance languages store grammatical gender.
-type Gender = 'DER' | 'DIE' | 'DAS' | 'MASCULINE' | 'FEMININE'
+// German stores its article as the Gender value; Romance languages store grammatical gender.
 
 // Per-language convention for how an LLM-emitted lemma should look.
 // Adding a new language = appending one entry below; the factory functions
@@ -65,33 +70,21 @@ export function normalizeIpa(raw: string | null | undefined): string | null {
 
 const baseFields = {
   lemma: z.string().min(1).max(60),
-  pos: z
-    .enum([
-      'NOUN',
-      'VERB',
-      'ADJECTIVE',
-      'ADVERB',
-      'PRONOUN',
-      'PREPOSITION',
-      'CONJUNCTION',
-      'ARTICLE',
-      'INTERJECTION',
-      'NUMERAL',
-    ])
+  pos: partOfSpeechSchema
     .nullable()
     .optional(),
-  gender: z.enum(['DER', 'DIE', 'DAS', 'MASCULINE', 'FEMININE']).nullable().optional(),
+  gender: genderSchema.nullable().optional(),
   ipa: z.string().max(80).nullable().optional(),
   translation: z.string().min(1).max(200),
   sentences: z
     .array(
       z.object({
-        text: z.string().min(1).max(300),
-        translation: z.string().min(1).max(300),
+        text: z.string().min(1).max(SENTENCE_MAX_LENGTH),
+        translation: z.string().min(1).max(SENTENCE_MAX_LENGTH),
       }),
     )
     .min(1)
-    .max(3),
+    .max(EXAMPLES_PER_LEVEL_MAX),
 }
 
 export function buildWordItemSchema(targetLanguageCode: string) {
@@ -136,7 +129,7 @@ export function buildDailyWordsPrompt(params: {
   count: number
   excludeLemmas: string[]
 }) {
-  const exclude = params.excludeLemmas.slice(0, 200)
+  const exclude = params.excludeLemmas
   const conv = getConvention(params.targetLanguageCode)
   const articleRule = conv.promptRule
     ? `- ${conv.promptRule}`
@@ -165,7 +158,7 @@ Return a JSON object with shape:
 }
 
 Rules:
-- Give exactly 2 example sentences per word, each under 20 words
+- Give exactly ${EXAMPLES_PER_LEVEL_TARGET} example sentences per word, each under 20 words
 - IPA: phonemic notation wrapped in /.../, e.g. /ʃtat/, /fɛɐ̯ˈɡaŋənhaɪ̯t/. Never use [...] (phonetic).
 ${articleRule}
 - Non-noun lemmas: lowercase unless orthography requires otherwise

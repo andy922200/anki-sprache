@@ -1,32 +1,32 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
-import type { UserSettings } from '@/generated/prisma/client.js'
 import { z } from 'zod'
+import { MAX_DAILY_NEW_COUNT, MAX_DUE_CARDS } from '@/config/limits.config.js'
+import type { UserSettings } from '@/generated/prisma/client.js'
+import { cefrSchema, llmProviderSchema, themeSchema, uiLanguageSchema } from '@/shared/schemas/enums.js'
 
-const CEFR = z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2'])
-const Theme = z.enum(['LIGHT', 'DARK', 'SYSTEM'])
-const UiLanguage = z.enum(['EN', 'ZH_TW'])
-const LlmProvider = z.enum(['OPENAI', 'ANTHROPIC', 'GOOGLE'])
 
 const settingsDto = z.object({
   targetLanguageCode: z.string(),
   nativeLanguageCode: z.string(),
-  cefrLevel: CEFR,
-  dailyNewCount: z.number().int().min(1).max(30),
-  preferredLlmProvider: LlmProvider.nullable(),
+  cefrLevel: cefrSchema,
+  dailyNewCount: z.number().int().min(1).max(MAX_DAILY_NEW_COUNT),
+  maxDueCards: z.number().int().min(1).max(MAX_DUE_CARDS),
+  preferredLlmProvider: llmProviderSchema.nullable(),
   preferredLlmModel: z.string().nullable(),
-  theme: Theme,
-  uiLanguage: UiLanguage,
+  theme: themeSchema,
+  uiLanguage: uiLanguageSchema,
 })
 
 const patchSettingsSchema = z.object({
   targetLanguageCode: z.string().length(2).optional(),
   nativeLanguageCode: z.string().length(2).optional(),
-  cefrLevel: CEFR.optional(),
-  dailyNewCount: z.number().int().min(1).max(30).optional(),
-  preferredLlmProvider: LlmProvider.nullable().optional(),
+  cefrLevel: cefrSchema.optional(),
+  dailyNewCount: z.number().int().min(1).max(MAX_DAILY_NEW_COUNT).optional(),
+  maxDueCards: z.number().int().min(1).max(MAX_DUE_CARDS).optional(),
+  preferredLlmProvider: llmProviderSchema.nullable().optional(),
   preferredLlmModel: z.string().max(100).nullable().optional(),
-  theme: Theme.optional(),
-  uiLanguage: UiLanguage.optional(),
+  theme: themeSchema.optional(),
+  uiLanguage: uiLanguageSchema.optional(),
 })
 
 export const settingsRoutes: FastifyPluginAsyncZod = async (app) => {
@@ -60,12 +60,13 @@ export const settingsRoutes: FastifyPluginAsyncZod = async (app) => {
         where: { userId },
         data,
       })
-      // Invalidate per-user card caches when the language pair changes — both
+      // Invalidate per-user card caches when the language pair or due cap changes — both
       // `/cards/due` keys and any other cards:* entries we've scoped by user.
-      const languagePairChanged =
+      const dueCacheStale =
         (req.body.targetLanguageCode && req.body.targetLanguageCode !== prev.targetLanguageCode) ||
-        (req.body.nativeLanguageCode && req.body.nativeLanguageCode !== prev.nativeLanguageCode)
-      if (languagePairChanged) {
+        (req.body.nativeLanguageCode && req.body.nativeLanguageCode !== prev.nativeLanguageCode) ||
+        (req.body.maxDueCards !== undefined && req.body.maxDueCards !== prev.maxDueCards)
+      if (dueCacheStale) {
         const keys = await app.redis.keys(`cards:due:${userId}:*`)
         if (keys.length) await app.redis.del(...keys)
       }
@@ -80,6 +81,7 @@ function toDto(s: UserSettings) {
     nativeLanguageCode: s.nativeLanguageCode,
     cefrLevel: s.cefrLevel,
     dailyNewCount: s.dailyNewCount,
+    maxDueCards: s.maxDueCards,
     preferredLlmProvider: s.preferredLlmProvider,
     preferredLlmModel: s.preferredLlmModel,
     theme: s.theme,

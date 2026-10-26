@@ -11,14 +11,16 @@ export function createAnthropicAdapter(
     provider: 'ANTHROPIC',
     model,
     async complete(input: LlmCompletionInput): Promise<LlmCompletionOutput> {
-      const res = await retryable(() =>
-        client.messages.create({
-          model,
-          max_tokens: 2048,
-          temperature: 0.5,
-          system: input.system + '\n\nAlways respond with a single JSON object and no prose.',
-          messages: [{ role: 'user', content: input.user }],
-        }),
+      const res = await retryable(
+        () =>
+          client.messages.create({
+            model,
+            max_tokens: 2048,
+            temperature: 0.5,
+            system: input.system + '\n\nAlways respond with a single JSON object and no prose.',
+            messages: [{ role: 'user', content: input.user }],
+          }),
+        { attempts: input.attempts },
       )
       const content = res.content
         .filter((b): b is Anthropic.TextBlock => b.type === 'text')

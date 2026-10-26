@@ -7,6 +7,8 @@ import { createGoogleAdapter } from './adapters/google.js'
 export interface LlmCompletionInput {
   system: string
   user: string
+  /** Total tries on retryable upstream errors; interactive callers pass 1 to fail fast. */
+  attempts?: number
 }
 
 export interface LlmCompletionOutput {

@@ -1,6 +1,7 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
-import { env, isProd } from '@/config/env.js'
+import { env, isProd } from '@/config/env.config.js'
+import { RATE_LIMITS } from '@/config/rate-limit.config.js'
 import {
   googleLoginSchema,
   authResponseSchema,
@@ -19,7 +20,7 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/google',
     {
-      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+      config: { rateLimit: RATE_LIMITS.authGoogle },
       schema: { body: googleLoginSchema, response: { 200: authResponseSchema } },
     },
     async (req, reply) => {
@@ -51,7 +52,7 @@ export const authRoutes: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/refresh',
     {
-      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+      config: { rateLimit: RATE_LIMITS.authRefresh },
       schema: { response: { 200: z.object({ accessToken: z.string() }) } },
     },
     async (req, reply) => {

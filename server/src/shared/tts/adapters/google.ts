@@ -1,4 +1,4 @@
-import { env } from '@/config/env.js'
+import { env } from '@/config/env.config.js'
 import { retryable } from '@/shared/llm/retry.js'
 import type { TtsAdapter, TtsSynthesizeInput } from '../ttsClient.js'
 

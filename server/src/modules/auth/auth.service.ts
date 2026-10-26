@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { OAuth2Client } from 'google-auth-library'
 import type { PrismaClient, User } from '@/generated/prisma/client.js'
 import jwt from 'jsonwebtoken'
-import { env } from '@/config/env.js'
+import { env } from '@/config/env.config.js'
 
 const googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID)
 

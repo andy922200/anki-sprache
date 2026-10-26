@@ -12,7 +12,8 @@ import {
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod'
 
-import { env, isDev } from '@/config/env.js'
+import { env, isDev } from '@/config/env.config.js'
+import { RATE_LIMITS } from '@/config/rate-limit.config.js'
 import prismaPlugin from '@/shared/plugins/prisma.plugin.js'
 import redisPlugin from '@/shared/plugins/redis.plugin.js'
 import bullmqPlugin from '@/shared/plugins/bullmq.plugin.js'
@@ -24,6 +25,7 @@ import { usersRoutes } from '@/modules/users/users.routes.js'
 import { settingsRoutes } from '@/modules/settings/settings.routes.js'
 import { llmKeysRoutes } from '@/modules/llmKeys/llmKeys.routes.js'
 import { languagesRoutes } from '@/modules/languages/languages.routes.js'
+import { audioRoutes } from '@/modules/audio/audio.routes.js'
 import { cardsRoutes } from '@/modules/cards/cards.routes.js'
 import { reviewsRoutes } from '@/modules/reviews/reviews.routes.js'
 import { generationRoutes } from '@/modules/generation/generation.routes.js'
@@ -60,8 +62,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   // authenticate) and per-route decorators (e.g. llmRateKey) are already
   // populated when keyGenerator executes.
   await app.register(rateLimit, {
-    max: 300,
-    timeWindow: '1 minute',
+    ...RATE_LIMITS.global,
     hook: 'preHandler',
     redis: app.redis,
     keyGenerator: (req) => req.user?.userId ?? req.ip,
@@ -94,6 +95,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(llmKeysRoutes, { prefix: '/me/llm-keys' })
   await app.register(languagesRoutes, { prefix: '/languages' })
   await app.register(cardsRoutes, { prefix: '/cards' })
+  await app.register(audioRoutes, { prefix: '/audio' })
   await app.register(reviewsRoutes, { prefix: '/reviews' })
   await app.register(generationRoutes, { prefix: '/generate' })
 

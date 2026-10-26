@@ -1,6 +1,6 @@
 import fp from 'fastify-plugin'
 import { Redis } from 'ioredis'
-import { env } from '@/config/env.js'
+import { env } from '@/config/env.config.js'
 
 export default fp(async (app) => {
   const redis = new Redis(env.REDIS_URL, {

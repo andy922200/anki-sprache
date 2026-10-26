@@ -1,21 +1,22 @@
 import { z } from 'zod'
+import { EXAMPLES_PER_LEVEL_MAX, SENTENCE_MAX_LENGTH } from '@/config/limits.config.js'
 
 export const cardAdjustmentResponseSchema = z.object({
   cardTranslation: z.string().min(1).max(300).optional(),
   newExamples: z
     .array(
       z.object({
-        text: z.string().min(1).max(300),
-        translation: z.string().min(1).max(300),
+        text: z.string().min(1).max(SENTENCE_MAX_LENGTH),
+        translation: z.string().min(1).max(SENTENCE_MAX_LENGTH),
       }),
     )
-    .max(3)
+    .max(EXAMPLES_PER_LEVEL_MAX)
     .optional(),
   existingExampleTranslations: z
     .array(
       z.object({
         text: z.string().min(1),
-        translation: z.string().min(1).max(300),
+        translation: z.string().min(1).max(SENTENCE_MAX_LENGTH),
       }),
     )
     .optional(),
@@ -48,7 +49,8 @@ export function buildCardAdjustmentPrompt(input: BuildCardAdjustmentPromptInput)
   const requested: string[] = []
   if (input.needCardTranslation) requested.push('cardTranslation')
   if (input.needNewExamples) requested.push('newExamples')
-  if (input.existingExamplesNeedingTranslation.length > 0) requested.push('existingExampleTranslations')
+  if (input.existingExamplesNeedingTranslation.length > 0)
+    requested.push('existingExampleTranslations')
 
   const pos = input.partOfSpeech ? ` (${input.partOfSpeech.toLowerCase()})` : ''
   const meaningLine = input.meaningAnchor

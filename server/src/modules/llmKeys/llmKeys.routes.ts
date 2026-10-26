@@ -1,11 +1,11 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 import { encryptSecret } from '@/shared/crypto/aesGcm.js'
+import { llmProviderSchema } from '@/shared/schemas/enums.js'
 
-const LlmProvider = z.enum(['OPENAI', 'ANTHROPIC', 'GOOGLE'])
 
 const maskedKeyDto = z.object({
-  provider: LlmProvider,
+  provider: llmProviderSchema,
   keyFingerprint: z.string(),
   updatedAt: z.string(),
 })
@@ -33,7 +33,7 @@ export const llmKeysRoutes: FastifyPluginAsyncZod = async (app) => {
     '/:provider',
     {
       schema: {
-        params: z.object({ provider: LlmProvider }),
+        params: z.object({ provider: llmProviderSchema }),
         body: z.object({ apiKey: z.string().min(10).max(500) }),
         response: { 200: maskedKeyDto },
       },
@@ -69,7 +69,7 @@ export const llmKeysRoutes: FastifyPluginAsyncZod = async (app) => {
     '/:provider',
     {
       schema: {
-        params: z.object({ provider: LlmProvider }),
+        params: z.object({ provider: llmProviderSchema }),
         response: { 200: z.object({ ok: z.boolean() }) },
       },
     },

@@ -1,16 +1,15 @@
+import { RATE_LIMITS } from '@/config/rate-limit.config.js'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 import { scheduleReview } from '@/shared/fsrs/scheduler.js'
+import { fsrsRatingSchema, fsrsStateSchema, reviewModeSchema } from '@/shared/schemas/enums.js'
 
-const FsrsRating = z.enum(['AGAIN', 'HARD', 'GOOD', 'EASY'])
-const FsrsState = z.enum(['NEW', 'LEARNING', 'REVIEW', 'RELEARNING'])
-const ReviewMode = z.enum(['FLIP', 'MULTIPLE_CHOICE'])
 
 const stateDto = z.object({
   due: z.string(),
   stability: z.number(),
   difficulty: z.number(),
-  state: FsrsState,
+  state: fsrsStateSchema,
   reps: z.number().int(),
   lapses: z.number().int(),
   lastReview: z.string(),
@@ -26,12 +25,12 @@ const logEntryDto = z.object({
   cardId: z.string(),
   lemma: z.string(),
   translation: z.string(),
-  rating: FsrsRating,
-  mode: ReviewMode,
+  rating: fsrsRatingSchema,
+  mode: reviewModeSchema,
   durationMs: z.number().int(),
   reviewedAt: z.string(),
-  stateBefore: FsrsState,
-  stateAfter: FsrsState,
+  stateBefore: fsrsStateSchema,
+  stateAfter: fsrsStateSchema,
 })
 
 export const reviewsRoutes: FastifyPluginAsyncZod = async (app) => {
@@ -40,12 +39,12 @@ export const reviewsRoutes: FastifyPluginAsyncZod = async (app) => {
   app.post(
     '/',
     {
-      config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
+      config: { rateLimit: RATE_LIMITS.reviews },
       schema: {
         body: z.object({
           cardId: z.string(),
-          rating: FsrsRating,
-          mode: ReviewMode,
+          rating: fsrsRatingSchema,
+          mode: reviewModeSchema,
           durationMs: z.number().int().min(0).max(10 * 60_000),
         }),
         response: { 200: reviewResponseDto },
@@ -128,8 +127,8 @@ export const reviewsRoutes: FastifyPluginAsyncZod = async (app) => {
         querystring: z.object({
           limit: z.coerce.number().int().min(1).max(100).default(50),
           cursor: z.string().optional(),
-          rating: FsrsRating.optional(),
-          mode: ReviewMode.optional(),
+          rating: fsrsRatingSchema.optional(),
+          mode: reviewModeSchema.optional(),
         }),
         response: {
           200: z.object({

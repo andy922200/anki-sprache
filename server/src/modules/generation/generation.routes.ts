@@ -3,21 +3,22 @@ import type { FastifyRequest } from 'fastify'
 import type { Queue } from 'bullmq'
 import { z } from 'zod'
 import { QUEUE_NAMES } from '@/shared/plugins/bullmq.plugin.js'
-import { isDev } from '@/config/env.js'
-import { upgradeResultKey, type UpgradeResultSummary } from './generation.service.js'
+import { MAX_DAILY_NEW_COUNT } from '@/config/limits.config.js'
+import { RATE_LIMITS } from '@/config/rate-limit.config.js'
+import { llmProviderSchema } from '@/shared/schemas/enums.js'
 
 /**
  * True if the user has a user-generation job currently queued, active, or
  * sitting in a retry backoff window. Used by the status endpoint to avoid
  * reporting a failed LLM call while BullMQ may still succeed on retry.
  *
- * Pass `mode` to restrict to a specific job mode (e.g. `UPGRADE_EXAMPLES`).
- * Omit it to match any daily/additional/upgrade job for the user.
+ * Pass `mode` to restrict to a specific job mode (e.g. `ADDITIONAL`).
+ * Omit it to match any daily/additional job for the user.
  */
 async function isUserGenerationJobInFlight(
   queue: Queue,
   userId: string,
-  mode?: 'DAILY' | 'ADDITIONAL' | 'UPGRADE_EXAMPLES',
+  mode?: 'DAILY' | 'ADDITIONAL',
 ): Promise<boolean> {
   const jobs = await queue.getJobs(['active', 'waiting', 'delayed', 'prioritized'], 0, 50, false)
   return jobs.some((j) => {
@@ -29,7 +30,6 @@ async function isUserGenerationJobInFlight(
   })
 }
 
-const LlmProvider = z.enum(['OPENAI', 'ANTHROPIC', 'GOOGLE'])
 
 export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
   app.decorateRequest('llmRateKey', '')
@@ -50,9 +50,7 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
     '/today',
     {
       config: {
-        rateLimit: isDev
-          ? { max: 60, timeWindow: '1 hour', keyGenerator: llmScopedKey }
-          : { max: 5, timeWindow: '1 hour', keyGenerator: llmScopedKey },
+        rateLimit: { ...RATE_LIMITS.generateToday, keyGenerator: llmScopedKey },
       },
       preHandler: attachLlmRateKey,
       schema: {
@@ -68,7 +66,7 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
             jobId: z.null(),
             status: z.literal('already-done'),
             cardIds: z.array(z.string()),
-            provider: LlmProvider.nullable(),
+            provider: llmProviderSchema.nullable(),
           }),
         },
       },
@@ -103,6 +101,24 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
         }
       }
 
+      // Preflight: we can only generate if user has a preferred LLM provider
+      // AND has uploaded an API key for that provider. Surface the reason
+      // synchronously so the UI can guide the user. Runs before the force
+      // delete below so a failed preflight never discards today's cards.
+      if (!settings.preferredLlmProvider) {
+        throw app.httpErrors.badRequest('LLM_PROVIDER_NOT_SET')
+      }
+      const key = await app.prisma.llmApiKey.findUnique({
+        where: {
+          userId_provider: { userId, provider: settings.preferredLlmProvider },
+        },
+      })
+      if (!key) {
+        throw app.httpErrors.badRequest(
+          `LLM_API_KEY_MISSING:${settings.preferredLlmProvider}`,
+        )
+      }
+
       if (existing && force) {
         // Regenerate: drop today's log and any NEW (unreviewed) user-card
         // states for those cards. Reviewed cards (LEARNING/REVIEW/...) stay
@@ -123,23 +139,6 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
         if (cacheKeys.length) await app.redis.del(...cacheKeys)
       }
 
-      // Preflight: we can only generate if user has a preferred LLM provider
-      // AND has uploaded an API key for that provider. Surface the reason
-      // synchronously so the UI can guide the user.
-      if (!settings.preferredLlmProvider) {
-        throw app.httpErrors.badRequest('LLM_PROVIDER_NOT_SET')
-      }
-      const key = await app.prisma.llmApiKey.findUnique({
-        where: {
-          userId_provider: { userId, provider: settings.preferredLlmProvider },
-        },
-      })
-      if (!key) {
-        throw app.httpErrors.badRequest(
-          `LLM_API_KEY_MISSING:${settings.preferredLlmProvider}`,
-        )
-      }
-
       // No deterministic jobId — BullMQ treats existing jobIds as no-op,
       // which would silently swallow retries after a previous failure.
       // Idempotency is enforced in generation.service.ts via the
@@ -147,6 +146,7 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
       const job = await app.queues.userGeneration.add('generateForUser', {
         userId,
         generationDate: today.toISOString(),
+        excludeCardIds: force && existing ? existing.cardIds : undefined,
       })
       reply.code(202)
       return { jobId: job.id!, status: 'queued' as const }
@@ -161,19 +161,8 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
           200: z.object({
             done: z.boolean(),
             cardIds: z.array(z.string()),
-            provider: LlmProvider.nullable(),
+            provider: llmProviderSchema.nullable(),
             lastError: z.string().nullable(),
-            upgradeInFlight: z.boolean(),
-            lastUpgradeError: z.string().nullable(),
-            lastUpgradeResult: z
-              .object({
-                completedAt: z.string(),
-                upgraded: z.number().int().nonnegative(),
-                skipped: z.number().int().nonnegative(),
-                failed: z.number().int().nonnegative(),
-                firstErrorReason: z.string().nullable(),
-              })
-              .nullable(),
           }),
         },
       },
@@ -186,35 +175,15 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
       const today = new Date().toISOString().slice(0, 10)
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
 
-      const [log, upgradeInFlight, recentUpgradeFail, upgradeResultRaw] = await Promise.all([
-        app.prisma.dailyGenerationLog.findUnique({
-          where: {
-            userId_generationDate_languageCode: {
-              userId,
-              generationDate: new Date(`${today}T00:00:00.000Z`),
-              languageCode: settings.targetLanguageCode,
-            },
-          },
-        }),
-        isUserGenerationJobInFlight(app.queues.userGeneration, userId, 'UPGRADE_EXAMPLES'),
-        app.prisma.llmUsageLog.findFirst({
-          where: {
+      const log = await app.prisma.dailyGenerationLog.findUnique({
+        where: {
+          userId_generationDate_languageCode: {
             userId,
-            purpose: 'EXAMPLE_REGEN',
-            success: false,
-            createdAt: { gte: oneHourAgo },
+            generationDate: new Date(`${today}T00:00:00.000Z`),
+            languageCode: settings.targetLanguageCode,
           },
-          orderBy: { createdAt: 'desc' },
-        }),
-        app.redis.get(upgradeResultKey(userId)),
-      ])
-
-      // Only surface a stale upgrade error once no upgrade job is still in
-      // flight — otherwise BullMQ may still succeed on retry.
-      const lastUpgradeError = upgradeInFlight ? null : recentUpgradeFail?.errorCode ?? null
-      const lastUpgradeResult: UpgradeResultSummary | null = upgradeResultRaw
-        ? (JSON.parse(upgradeResultRaw) as UpgradeResultSummary)
-        : null
+        },
+      })
 
       if (log) {
         return {
@@ -222,9 +191,6 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
           cardIds: log.cardIds,
           provider: log.provider,
           lastError: null,
-          upgradeInFlight,
-          lastUpgradeError,
-          lastUpgradeResult,
         }
       }
 
@@ -238,9 +204,6 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
           cardIds: [],
           provider: null,
           lastError: null,
-          upgradeInFlight,
-          lastUpgradeError,
-          lastUpgradeResult,
         }
       }
 
@@ -261,9 +224,6 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
         cardIds: [],
         provider: null,
         lastError: recentFail?.errorCode ?? null,
-        upgradeInFlight,
-        lastUpgradeError,
-        lastUpgradeResult,
       }
     },
   )
@@ -272,13 +232,11 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
     '/more',
     {
       config: {
-        rateLimit: isDev
-          ? { max: 60, timeWindow: '1 hour', keyGenerator: llmScopedKey }
-          : { max: 10, timeWindow: '1 hour', keyGenerator: llmScopedKey },
+        rateLimit: { ...RATE_LIMITS.generateMore, keyGenerator: llmScopedKey },
       },
       preHandler: attachLlmRateKey,
       schema: {
-        body: z.object({ count: z.number().int().min(1).max(20).default(5) }),
+        body: z.object({ count: z.number().int().min(1).max(MAX_DAILY_NEW_COUNT).default(5) }),
         response: { 202: z.object({ jobId: z.string(), status: z.literal('queued') }) },
       },
     },
@@ -315,55 +273,6 @@ export const generationRoutes: FastifyPluginAsyncZod = async (app) => {
         generationDate: today.toISOString(),
         mode: 'ADDITIONAL',
         count: req.body.count,
-      })
-      reply.code(202)
-      return { jobId: job.id!, status: 'queued' as const }
-    },
-  )
-
-  app.post(
-    '/examples/upgrade',
-    {
-      config: {
-        rateLimit: isDev
-          ? { max: 60, timeWindow: '1 hour', keyGenerator: llmScopedKey }
-          : { max: 5, timeWindow: '1 hour', keyGenerator: llmScopedKey },
-      },
-      preHandler: attachLlmRateKey,
-      schema: {
-        response: {
-          202: z.object({ jobId: z.string(), status: z.literal('queued') }),
-          200: z.object({ jobId: z.null(), status: z.literal('already-running') }),
-        },
-      },
-    },
-    async (req, reply) => {
-      const userId = req.user!.userId
-      const settings = await app.prisma.userSettings.findUniqueOrThrow({ where: { userId } })
-      if (!settings.preferredLlmProvider) {
-        throw app.httpErrors.badRequest('LLM_PROVIDER_NOT_SET')
-      }
-      const key = await app.prisma.llmApiKey.findUnique({
-        where: { userId_provider: { userId, provider: settings.preferredLlmProvider } },
-      })
-      if (!key) {
-        throw app.httpErrors.badRequest(`LLM_API_KEY_MISSING:${settings.preferredLlmProvider}`)
-      }
-
-      const inFlight = await isUserGenerationJobInFlight(
-        app.queues.userGeneration,
-        userId,
-        'UPGRADE_EXAMPLES',
-      )
-      if (inFlight) {
-        reply.code(200)
-        return { jobId: null as null, status: 'already-running' as const }
-      }
-
-      const job = await app.queues.userGeneration.add('upgradeExamplesForUser', {
-        userId,
-        generationDate: new Date().toISOString(),
-        mode: 'UPGRADE_EXAMPLES',
       })
       reply.code(202)
       return { jobId: job.id!, status: 'queued' as const }
