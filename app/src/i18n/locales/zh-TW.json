@@ -110,7 +110,6 @@
     "profile": "個人資料",
     "displayName": "顯示名稱",
     "timezone": "時區",
-    "timezoneHint": "例如 Asia/Taipei",
     "timezoneUnknown": "未知的時區（{value}），請重新選擇",
     "learning": "學習設定",
     "targetLanguage": "目標語言",
