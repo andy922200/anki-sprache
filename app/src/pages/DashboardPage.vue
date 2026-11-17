@@ -33,6 +33,25 @@ const dueCount = computed<number>(() => dueCards.value.length)
 const topUpTarget = computed<number>(() =>
   Math.min(dailyNewCount.value, settings.settings?.maxDueCards ?? dailyNewCount.value),
 )
+// Deck size can fall short of the daily target (LLM couldn't fill it); once
+// "top up" pushes it past the target a plain count reads better than "7 / 5".
+const deckSummary = computed<string>(() => {
+  const count = status.value?.cardIds.length ?? 0
+  const target = dailyNewCount.value
+  const provider = status.value?.provider
+  const short = count < target
+  if (provider) {
+    return t(
+      short ? 'dashboard.deckSummaryShortWithProvider' : 'dashboard.deckSummaryWithProvider',
+      {
+        count,
+        target,
+        provider,
+      },
+    )
+  }
+  return t(short ? 'dashboard.deckSummaryShort' : 'dashboard.deckSummary', { count, target })
+})
 const PREVIEW_COUNT = 5
 const todayPreview = computed<CardDto[]>(() => dueCards.value.slice(0, PREVIEW_COUNT))
 
@@ -321,14 +340,7 @@ async function onGenerateMore(count = topUpCount.value, fillShortfall = false) {
         <div class="flex-1">
           <h2 class="text-lg font-semibold">{{ t('dashboard.todayDeck') }}</h2>
           <p class="mt-1 text-sm text-ink-muted">
-            {{
-              status.provider
-                ? t('dashboard.deckSummaryWithProvider', {
-                    count: status.cardIds.length,
-                    provider: status.provider,
-                  })
-                : t('dashboard.deckSummary', { count: status.cardIds.length })
-            }}
+            {{ deckSummary }}
           </p>
         </div>
         <AppButton
