@@ -5,6 +5,7 @@ import pino from 'pino'
 import { PrismaClient } from './generated/prisma/client.js'
 import { env, isDev } from './config/env.config.js'
 import { QUEUE_NAMES } from './shared/plugins/bullmq.plugin.js'
+import { localDateFor, localHourFor } from './shared/time/localDay.js'
 import {
   NO_NEW_WORDS_TTL_SECONDS,
   NoNewWordsError,
@@ -167,33 +168,6 @@ async function main() {
       await redis.quit()
       process.exit(0)
     })
-  }
-}
-
-function localHourFor(tz: string, d: Date): number {
-  try {
-    const fmt = new Intl.DateTimeFormat('en-US', {
-      hour: 'numeric',
-      hour12: false,
-      timeZone: tz,
-    })
-    return Number(fmt.format(d))
-  } catch {
-    return d.getUTCHours()
-  }
-}
-
-function localDateFor(tz: string, d: Date): string {
-  try {
-    const fmt = new Intl.DateTimeFormat('en-CA', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      timeZone: tz,
-    })
-    return fmt.format(d)
-  } catch {
-    return d.toISOString().slice(0, 10)
   }
 }
 
