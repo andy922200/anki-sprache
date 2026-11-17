@@ -49,7 +49,7 @@
 | 路徑 | 元件 | 公開 / 需登入 | 子頁面 | 主要功能 | Query / Params |
 |---|---|---|---|---|---|
 | `/login` | `LoginPage.vue` | 公開（`meta.public`） | — | Google Sign-In；成功後導向 `redirect` 或 `/` | `?redirect=<path>` |
-| `/` | `DashboardPage.vue` | 需登入 | — | 每日生成狀態（每 1.5 秒輪詢、最多 10 次，約 15 秒後請使用者重新整理）、LLM 設定檢查、今日 5 張卡預覽、Flip / 選擇題 / 練習模式入口 | — |
+| `/` | `DashboardPage.vue` | 需登入 | — | 每日生成狀態（每 1.5 秒輪詢、最多 10 次，約 15 秒後請使用者重新整理）、LLM 設定檢查、今日目標與實際產生字數、今日卡片預覽、Flip / 選擇題 / 練習模式入口 | — |
 | `/review` | `ReviewPage.vue` | 需登入 | — | 複習介面；支援 FSRS 正式複習與 Practice 模式；快速鍵 1–4 評分、Space / Enter 翻面、P 播放單字發音 | `mode=FLIP\|choice`、`practice=true` |
 | `/logbook` | `LogbookPage.vue` | 需登入 | — | 複習紀錄分頁（每頁 50 筆），可按評分與模式篩選 | — |
 | `/settings` | `SettingsPage.vue` | 需登入 | `/settings/api-keys` | 個人資料、目標 / 母語、CEFR、每日新詞數、偏好 LLM Provider + Model、主題、UI 語系 | — |

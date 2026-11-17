@@ -12,7 +12,7 @@ import {
 } from '@/shared/llm/prompts/cardExamples.js'
 
 const LOCK_TTL_SECONDS = 60
-const LOCK_WAIT_TIMEOUT_MS = 20_000
+const LOCK_WAIT_TIMEOUT_MS = 20000
 const LOCK_POLL_INTERVAL_MS = 500
 
 interface CardGaps {

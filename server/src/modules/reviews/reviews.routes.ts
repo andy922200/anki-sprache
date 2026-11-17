@@ -1,3 +1,4 @@
+import { MAX_REVIEW_DURATION_MS } from '@/config/limits.config.js'
 import { RATE_LIMITS } from '@/config/rate-limit.config.js'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
@@ -27,7 +28,7 @@ const logEntryDto = z.object({
   translation: z.string(),
   rating: fsrsRatingSchema,
   mode: reviewModeSchema,
-  durationMs: z.number().int(),
+  durationMs: z.number().int().nullable(),
   reviewedAt: z.string(),
   stateBefore: fsrsStateSchema,
   stateAfter: fsrsStateSchema,
@@ -45,7 +46,7 @@ export const reviewsRoutes: FastifyPluginAsyncZod = async (app) => {
           cardId: z.string(),
           rating: fsrsRatingSchema,
           mode: reviewModeSchema,
-          durationMs: z.number().int().min(0).max(10 * 60_000),
+          durationMs: z.number().int().min(0).max(MAX_REVIEW_DURATION_MS).nullable(),
         }),
         response: { 200: reviewResponseDto },
       },
@@ -102,7 +103,7 @@ export const reviewsRoutes: FastifyPluginAsyncZod = async (app) => {
 
       const nextDueInMinutes = Math.max(
         0,
-        Math.round((saved.due.getTime() - Date.now()) / 60_000),
+        Math.round((saved.due.getTime() - Date.now()) / 60000),
       )
 
       return {

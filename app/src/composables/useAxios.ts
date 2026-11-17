@@ -11,7 +11,7 @@ import { i18n } from '@/i18n'
 const instance: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
   withCredentials: true,
-  timeout: 15_000,
+  timeout: 15000,
 })
 
 let refreshPromise: Promise<string> | null = null

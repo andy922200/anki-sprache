@@ -5,7 +5,8 @@ export interface SubmitReviewInput {
   cardId: string
   rating: FsrsRating
   mode: ReviewMode
-  durationMs: number
+  /** null when the duration is not trustworthy (e.g. card left idle). */
+  durationMs: number | null
 }
 
 export async function postReview(input: SubmitReviewInput) {

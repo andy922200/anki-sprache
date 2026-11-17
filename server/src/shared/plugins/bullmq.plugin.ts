@@ -14,7 +14,7 @@ export default fp(async (app) => {
     connection,
     defaultJobOptions: {
       attempts: 2,
-      backoff: { type: 'exponential', delay: 2_000 },
+      backoff: { type: 'exponential', delay: 2000 },
       removeOnComplete: { count: 500 },
       removeOnFail: { count: 1000 },
     },
