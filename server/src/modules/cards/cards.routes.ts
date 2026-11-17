@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { RATE_LIMITS } from '@/config/rate-limit.config.js'
 import type { CEFR as CefrLevel, Prisma } from '@/generated/prisma/client.js'
 import { ensureCardExamples } from './cards.service.js'
+import { localDayRange } from '@/shared/time/localDay.js'
 import {
   cefrSchema,
   fsrsStateSchema,
@@ -92,9 +93,9 @@ function toCardDto(card: CardWithRelations, state: CardStateRow | null): z.infer
 export const cardsRoutes: FastifyPluginAsyncZod = async (app) => {
   app.addHook('preHandler', app.authenticate)
 
-  // Today's deck regardless of FSRS due date. Used by "practice again" mode
-  // so the learner can drill the same 5 cards without waiting for FSRS to
-  // schedule them.
+  // Everything the learner touched today, regardless of FSRS due date: today's
+  // generated deck plus any card already reviewed today (e.g. older due cards).
+  // Used by "practice again" mode, which never writes reviews.
   app.get(
     '/today',
     {
@@ -102,28 +103,44 @@ export const cardsRoutes: FastifyPluginAsyncZod = async (app) => {
     },
     async (req) => {
       const userId = req.user!.userId
-      const userSettings = await app.prisma.userSettings.findUniqueOrThrow({
-        where: { userId },
-        select: { cefrLevel: true, nativeLanguageCode: true, targetLanguageCode: true },
-      })
+      const [userSettings, user] = await Promise.all([
+        app.prisma.userSettings.findUniqueOrThrow({
+          where: { userId },
+          select: { cefrLevel: true, nativeLanguageCode: true, targetLanguageCode: true },
+        }),
+        app.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } }),
+      ])
       const native = userSettings.nativeLanguageCode
+      const target = userSettings.targetLanguageCode
 
-      const today = new Date().toISOString().slice(0, 10)
+      // Daily logs are keyed by UTC date (see generation routes); reviews use the user's local day.
+      const now = new Date()
       const log = await app.prisma.dailyGenerationLog.findUnique({
         where: {
           userId_generationDate_languageCode: {
             userId,
-            generationDate: new Date(`${today}T00:00:00.000Z`),
-            languageCode: userSettings.targetLanguageCode,
+            generationDate: new Date(`${now.toISOString().slice(0, 10)}T00:00:00.000Z`),
+            languageCode: target,
           },
         },
       })
-      if (!log) return []
+      const { start, end } = localDayRange(user.timezone, now)
+      const reviewed = await app.prisma.reviewLog.findMany({
+        where: { userId, reviewedAt: { gte: start, lt: end } },
+        orderBy: { reviewedAt: 'asc' },
+        distinct: ['cardId'],
+        select: { cardId: true },
+      })
+
+      const cardIds = [...new Set([...(log?.cardIds ?? []), ...reviewed.map((r) => r.cardId)])]
+      if (cardIds.length === 0) return []
 
       const states = await app.prisma.userCardState.findMany({
-        where: { userId, cardId: { in: log.cardIds } },
+        where: { userId, cardId: { in: cardIds }, card: { is: { languageCode: target } } },
         include: { card: { include: cardInclude(native, userSettings.cefrLevel) } },
       })
+      const order = new Map(cardIds.map((id, i) => [id, i]))
+      states.sort((a, b) => (order.get(a.cardId) ?? 0) - (order.get(b.cardId) ?? 0))
 
       return states.map((s) => toCardDto(s.card, s))
     },

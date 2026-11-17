@@ -54,7 +54,7 @@
     "pickProvider": "Pick a preferred LLM provider in Settings first",
     "addKey": "Add your API key in Settings → API keys",
     "caughtUp": "🎉 You're caught up. Want extra practice?",
-    "practiceAgain": "Practice today's words",
+    "practiceAgain": "Practice today's words ({count})",
     "generateMore": "Generate {count} more",
     "generateMoreQueued": "Generating more words…",
     "noNewWordsRetry": "The LLM only suggested words you already have: {words}\n\nTry again?",

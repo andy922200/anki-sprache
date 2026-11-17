@@ -23,6 +23,7 @@ const { t } = useI18n()
 
 const status = ref<GenerationStatusDto | null>(null)
 const dueCards = ref<CardDto[]>([])
+const practiceCount = ref(0)
 const busy = ref(false)
 const keys = ref<MaskedKeyDto[]>([])
 
@@ -84,6 +85,8 @@ async function refresh() {
   status.value = s
   dueCards.value = due
   keys.value = k
+  // The practice button only shows once nothing is due; its count is today's whole session.
+  practiceCount.value = due.length === 0 ? (await cardsApi.getToday()).length : 0
 }
 
 onMounted(async () => {
@@ -375,7 +378,7 @@ async function onGenerateMore(count = topUpCount.value, fillShortfall = false) {
         </p>
         <div class="flex flex-wrap gap-2">
           <AppButton v-if="dueCount === 0" variant="secondary" :disabled="busy" @click="onPractice">
-            {{ t('dashboard.practiceAgain') }}
+            {{ t('dashboard.practiceAgain', { count: practiceCount }) }}
           </AppButton>
           <AppButton variant="ghost" :disabled="!!setupMissing || busy" @click="onGenerateMore()">
             {{ busy ? t('common.loading') : t('dashboard.generateMore', { count: topUpCount }) }}
