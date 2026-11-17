@@ -1,5 +1,6 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
+import { timezoneSchema } from '@/shared/schemas/timezone.js'
 
 const userDto = z.object({
   id: z.string(),
@@ -11,7 +12,7 @@ const userDto = z.object({
 
 const patchUserSchema = z.object({
   displayName: z.string().min(1).max(60).optional(),
-  timezone: z.string().min(1).max(50).optional(),
+  timezone: timezoneSchema.optional(),
 })
 
 export const usersRoutes: FastifyPluginAsyncZod = async (app) => {

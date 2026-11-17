@@ -110,7 +110,7 @@
     "profile": "Profile",
     "displayName": "Display name",
     "timezone": "Timezone",
-    "timezoneHint": "e.g. Asia/Taipei",
+    "timezoneUnknown": "Unknown timezone ({value}), please choose one",
     "learning": "Learning",
     "targetLanguage": "Target language",
     "nativeLanguage": "Native language",

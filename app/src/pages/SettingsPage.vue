@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import { useSettingsStore } from '@/stores/settings.store'
 import { useUiStore } from '@/stores/ui.store'
 import { useCardsStore } from '@/stores/cards.store'
+import { useTimezoneOptions } from '@/composables/useTimezoneOptions'
 import * as usersApi from '@/api/users.api'
 import * as languagesApi from '@/api/languages.api'
 import type { LanguageDto, CEFR, LlmProvider, UiLanguage, UserSettingsDto } from '@/types/domain'
@@ -23,6 +24,10 @@ const displayName = ref('')
 const timezone = ref('UTC')
 const draft = ref<UserSettingsDto | null>(null)
 const saving = ref(false)
+
+// Keyed on the stored value, not the form value, so a legacy invalid timezone stays listed
+// after the user picks another one.
+const { options: timezoneOptions } = useTimezoneOptions(() => auth.user?.timezone ?? '')
 
 const cefrOptions: CEFR[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
 const providerOptions: (LlmProvider | '')[] = ['', 'OPENAI', 'ANTHROPIC', 'GOOGLE']
@@ -84,12 +89,13 @@ async function save() {
   saving.value = true
   try {
     if (auth.user) {
-      if (displayName.value !== auth.user.displayName || timezone.value !== auth.user.timezone) {
-        const updated = await usersApi.patchMe({
-          displayName: displayName.value,
-          timezone: timezone.value,
-        })
-        auth.setUser(updated)
+      // Only what changed: re-sending an unchanged legacy timezone would be rejected by the
+      // server and block saving the rest of the profile.
+      const patch: Parameters<typeof usersApi.patchMe>[0] = {}
+      if (displayName.value !== auth.user.displayName) patch.displayName = displayName.value
+      if (timezone.value !== auth.user.timezone) patch.timezone = timezone.value
+      if (Object.keys(patch).length > 0) {
+        auth.setUser(await usersApi.patchMe(patch))
       }
     }
     if (draft.value) {
@@ -142,12 +148,19 @@ async function save() {
         </label>
         <label class="text-sm">
           {{ t('settings.timezone') }}
-          <input
+          <select
             v-model="timezone"
-            type="text"
-            :placeholder="t('settings.timezoneHint')"
             class="mt-1 w-full rounded-md border border-border bg-surface-muted px-3 py-2 dark:bg-surface-dark-muted dark:border-border-dark"
-          />
+          >
+            <option
+              v-for="opt in timezoneOptions"
+              :key="opt.value"
+              :value="opt.value"
+              :disabled="opt.unknown"
+            >
+              {{ opt.label }}
+            </option>
+          </select>
         </label>
       </div>
     </AppCard>

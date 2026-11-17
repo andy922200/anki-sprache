@@ -22,7 +22,8 @@
     "prisma:generate": "prisma generate",
     "audit:audio": "tsx --env-file=.env scripts/audit-audio.ts",
     "prune:audio:lang": "tsx --env-file=.env scripts/prune-audio-by-language.ts",
-    "backfill:pt-gender": "tsx --env-file=.env scripts/backfill-pt-gender.ts"
+    "backfill:pt-gender": "tsx --env-file=.env scripts/backfill-pt-gender.ts",
+    "normalize:timezones": "tsx --env-file=.env scripts/normalize-user-timezones.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

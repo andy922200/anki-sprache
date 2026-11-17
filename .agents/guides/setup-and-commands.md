@@ -41,6 +41,7 @@
 | `audit:audio` | 找出 R2 上沒有 DB 參照的孤兒音檔（`--delete --confirm` 才會刪） |
 | `prune:audio:lang <code>` | 刪除 `audio/*/<code>/` 底下全部音檔，用於停用語言 |
 | `backfill:pt-gender` | 以 LLM 回填既有葡萄牙文名詞的陰陽性；需 `BACKFILL_LLM_PROVIDER` / `BACKFILL_LLM_KEY`（選填 `BACKFILL_LLM_MODEL`） |
+| `normalize:timezones` | 把 `User.timezone` 中不合法的值（如 `UTC+8`、`+08:00`）依 `OFFSET_DEFAULT_ZONES` 對照表轉成 IANA 名稱；對照不到的只列出、不改；不需要外部服務，只讀寫 DB |
 
 - 腳本的 import 鏈會經 `config/env.config.ts` 全量校驗，所以對遠端 DB 或正式 bucket 執行時要**保留**本機 `.env`，再用 shell 匯出覆寫 `DATABASE_URL`、`R2_BUCKET`、`R2_PUBLIC_URL`（shell 優先於 `--env-file`）。
 - 本機 `.env` 預設指向 dev bucket，清正式 bucket 的孤兒時 DB 與 bucket 變數都要一起覆寫。
