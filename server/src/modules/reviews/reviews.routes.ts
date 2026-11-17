@@ -103,7 +103,7 @@ export const reviewsRoutes: FastifyPluginAsyncZod = async (app) => {
 
       const nextDueInMinutes = Math.max(
         0,
-        Math.round((saved.due.getTime() - Date.now()) / 60_000),
+        Math.round((saved.due.getTime() - Date.now()) / 60000),
       )
 
       return {
