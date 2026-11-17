@@ -10,6 +10,9 @@ import MultipleChoice from '@/components/cards/MultipleChoice.vue'
 import RatingButtons from '@/components/cards/RatingButtons.vue'
 import AppButton from '@/components/common/AppButton.vue'
 
+// Keep in sync with MAX_REVIEW_DURATION_MS in server/src/config/limits.config.ts.
+const MAX_REVIEW_DURATION_MS = 10 * 60000
+
 const route = useRoute()
 const router = useRouter()
 const cards = useCardsStore()
@@ -50,7 +53,9 @@ const needsSetup = computed(
 
 async function rate(rating: FsrsRating) {
   if (!cards.CURRENT || blocked.value) return
-  const durationMs = Date.now() - startedAt.value
+  const elapsed = Date.now() - startedAt.value
+  // Idle past the limit (or a clock moved backwards) means the time is unreliable.
+  const durationMs = elapsed < 0 || elapsed > MAX_REVIEW_DURATION_MS ? null : elapsed
   try {
     await cards.submitReview(rating, mode.value, durationMs)
     lastChoiceCorrect.value = null

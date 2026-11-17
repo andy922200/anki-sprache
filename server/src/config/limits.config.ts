@@ -4,6 +4,12 @@ export const MAX_DAILY_NEW_COUNT = 30
 /** Largest due-card queue a user can ask `/cards/due` and the review page to load. */
 export const MAX_DUE_CARDS = 200
 
+/**
+ * Longest review duration (ms) taken as real. Beyond it the client sends null:
+ * the card was most likely left idle. Keep in sync with `app/src/pages/ReviewPage.vue`.
+ */
+export const MAX_REVIEW_DURATION_MS = 10 * 60000
+
 /** Examples the LLM is asked for per card and CEFR level. */
 export const EXAMPLES_PER_LEVEL_TARGET = 2
 

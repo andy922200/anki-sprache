@@ -71,7 +71,7 @@ export const useCardsStore = defineStore('cards', {
         this.loading = false
       }
     },
-    async submitReview(rating: FsrsRating, mode: ReviewMode, durationMs: number) {
+    async submitReview(rating: FsrsRating, mode: ReviewMode, durationMs: number | null) {
       const card = this.CURRENT
       if (!card) return
       if (!this.practiceMode) {

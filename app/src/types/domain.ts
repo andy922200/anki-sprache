@@ -80,7 +80,7 @@ export interface ReviewLogEntry {
   translation: string
   rating: FsrsRating
   mode: ReviewMode
-  durationMs: number
+  durationMs: number | null
   reviewedAt: string
   stateBefore: FsrsState
   stateAfter: FsrsState
