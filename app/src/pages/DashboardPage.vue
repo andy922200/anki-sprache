@@ -377,7 +377,7 @@ async function onGenerateMore(count = topUpCount.value, fillShortfall = false) {
           <AppButton v-if="dueCount === 0" variant="secondary" :disabled="busy" @click="onPractice">
             {{ t('dashboard.practiceAgain') }}
           </AppButton>
-          <AppButton variant="ghost" :disabled="!!setupMissing || busy" @click="onGenerateMore">
+          <AppButton variant="ghost" :disabled="!!setupMissing || busy" @click="onGenerateMore()">
             {{ busy ? t('common.loading') : t('dashboard.generateMore', { count: topUpCount }) }}
           </AppButton>
         </div>
