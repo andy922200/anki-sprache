@@ -11,7 +11,7 @@ import { buildTtsAdapter } from '@/shared/tts/ttsClient.js'
 
 const LOCK_TTL_SECONDS = 30
 const LOCK_POLL_INTERVAL_MS = 400
-const LOCK_WAIT_TIMEOUT_MS = 20_000
+const LOCK_WAIT_TIMEOUT_MS = 20000
 
 // The definite article shown/spoken with a lemma. German stores its article as
 // the gender value (der/die/das); Portuguese maps MASCULINE/FEMININE → o/a.

@@ -23,7 +23,8 @@ pnpm --filter ./server test:watch      # 後端 watch 模式
 
 ## 現況
 
-- 後端已有測試：`cards.service.test.ts`、`generation.service.test.ts`、`generation.routes.test.ts`、`shared/llm/prompts/dailyWords.test.ts`。前端尚無測試檔。
+- 後端已有測試：`cards.service.test.ts`、`cards.routes.test.ts`、`generation.service.test.ts`、`generation.routes.test.ts`、`reviews.routes.test.ts`、`users.routes.test.ts`、`shared/llm/prompts/dailyWords.test.ts`、`shared/time/localDay.test.ts`、`shared/time/timezone.test.ts`。
+- 前端已有測試：`stores/__tests__/cards.store.spec.ts`（Pinia store，以 `vi.hoisted` + `vi.mock` 替換 `@/api/*`）、`composables/__tests__/useTimezoneOptions.spec.ts`（composable，直接以 `i18n.global.locale` 切語系）、`pages/__tests__/DashboardPage.spec.ts`（以 `@vue/test-utils` 的 `mount` 掛整頁，stub 子元件、mock `vue-router` 與 API）、`pages/__tests__/SettingsPage.spec.ts`（同樣掛整頁，`global.plugins` 掛 `i18n`，並用假計時器擋掉 toast 的 `setTimeout`）。前端元件測試把 `i18n.global.locale` 設為 `en`，以固定英文文案查按鈕。
 - 後端的慣例是**不連 DB / Redis**：以 `vi.fn()` 手寫 Prisma / Redis 替身。路由測試用 `Fastify()` 搭配 `fastify-type-provider-zod` 的編譯器與 `@fastify/sensible`，再以 `inject` 發請求；會載入 `env.config.ts` 或 BullMQ plugin 的模組要先 `vi.mock`（例：`vi.mock('@/config/env.config.js', () => ({ isDev: true, env: {} }))`），否則 Zod 環境變數校驗會在匯入時失敗。新增後端測試請沿用這個模式。
 - 尚未引入 Playwright / Supertest / Testing Library；如需 E2E 或 API integration test，請先與 owner 討論方向。
 - 尚未設定覆蓋率（未來可用 `vitest --coverage` 搭配 v8 provider）。

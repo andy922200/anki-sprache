@@ -54,7 +54,7 @@
 | PUT | `/me/llm-keys/:provider` | ✅ | `provider` ∈ {OPENAI, ANTHROPIC, GOOGLE} |
 | DELETE | `/me/llm-keys/:provider` | ✅ | — |
 | GET | `/languages` | ✅ | 全部語言，已啟用的排前面（`enabled` 欄位區分） |
-| GET | `/cards/today` | ✅ | 當日卡組（無論是否到期） |
+| GET | `/cards/today` | ✅ | 今日碰過的卡（當日生成卡組 ∪ 使用者時區當天已複習的卡，無論是否到期）；練習模式用 |
 | GET | `/cards/due` | ✅ | 到期卡，上限為 `UserSettings.maxDueCards`；60 秒 Redis 快取 |
 | GET | `/cards/:id` | ✅ | 單卡，支援 ETag 304 |
 | POST | `/cards/:id/examples/ensure` | ✅ | 即時補齊該卡在使用者 CEFR + 母語下缺的例句／翻譯；用請求者自己的 BYOK；同一張卡同時請求回 409 `EXAMPLES_GENERATION_IN_PROGRESS`（Redis 鎖 60 秒），LLM 失敗回 424（`LLM_RATE_LIMITED`、`LLM_INVALID_RESPONSE` 等） |

@@ -26,7 +26,7 @@ export async function retryable<T>(
 ): Promise<T> {
   const attempts = opts.attempts ?? 3
   const baseDelay = opts.baseDelayMs ?? 1000
-  const maxDelay = opts.maxDelayMs ?? 10_000
+  const maxDelay = opts.maxDelayMs ?? 10000
 
   let lastErr: unknown
   for (let i = 0; i < attempts; i++) {
